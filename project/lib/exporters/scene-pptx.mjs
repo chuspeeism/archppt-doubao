@@ -10,7 +10,7 @@
 // 绘制顺序同 SVG：背景 → 标题/副标题 → 容器 → 节点 → 图标 → 文字 → 全部边线 → 全部边标签。
 // PPT 没有 z-index，也是后写的压在上面，两边天然一致。
 //
-// 导出名：sceneToPptxShapes / sceneToPptx / PPTX_TEXT_METRICS
+// 导出名：sceneToPptxShapes / sceneToPptx / PPTX_TEXT_METRICS / pptxFonts
 
 // import 必须整行写完（构建期按行剥离，见 docs/phase2-contracts.md §0）
 import { dmlColor, dmlSolidFill, dmlNoFill, dmlLine, dmlPrstShape, dmlRoundAdj, dmlCustomShape, dmlTextShape, dmlSlideXml } from './drawingml.mjs';
@@ -130,7 +130,12 @@ const pptxFamilies = (stack) => String(stack == null ? '' : stack)
   .map((f) => f.trim().replace(/^['"]|['"]$/g, ''))
   .filter((f) => f !== '');
 
-const pptxFonts = (palette) => {
+// 导出给 draw-steps.mjs 用：豆包驱动器（AppleScript / COM 逐个画形状那条路）要和
+// 原生 PPTX 导出写同一对字体名，否则 PowerPoint 会把文字落到主题字体（等线 / Calibri）上，
+// 而卡片宽、药丸宽都是按苹方估的，渲成等线就对不齐。**替身规则只有这一份**，别再抄一遍。
+// 加 export 不改逻辑：构建期 stripModuleSyntax 会把行首的 `export ` 整个剥掉，
+// 内联进产物的代码与加 export 之前逐字节相同。
+export const pptxFonts = (palette) => {
   const families = pptxFamilies(palette.fontFamily);
   let latin = null;
   let pending = null;   // 系统别名对应的替身：只有整条栈都没有具体族时才用它

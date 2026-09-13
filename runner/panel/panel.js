@@ -58,7 +58,9 @@
   function reset() {
     state = {
       phase: 'waiting', title: null, specPath: null, nodes: null, edges: null,
-      total: null, byKind: null, current: null, latest: null, done: [], result: null,
+      total: null, byKind: null, slides: null, slide: null, slideTitle: null,
+      platform: null,
+      current: null, latest: null, done: [], result: null,
       error: null, log: null, t0: null, tLast: null
     };
   }
@@ -78,14 +80,28 @@
         state.specPath = e.specPath == null ? null : e.specPath;
         state.nodes = e.nodes == null ? null : e.nodes;
         state.edges = e.edges == null ? null : e.edges;
+        if (e.slides != null) state.slides = e.slides;
       } else if (e.phase === 'layout') {
         state.phase = 'layout';
         state.total = e.total == null ? null : e.total;
         state.byKind = e.byKind && typeof e.byKind === 'object' ? e.byKind : null;
+        if (e.slides != null) state.slides = e.slides;
         if (t != null) state.t0 = t;                 // 累计用时从算完布局起算
+      } else if (e.phase === 'slide') {
+        // 翻页。**不动 state.phase** —— slide 不是一个版面，只是「现在画到第几页」。
+        // 单页时驱动器压根不发这条事件，界面跟以前一模一样。
+        state.slide = e.slide == null ? null : e.slide;
+        if (e.slides != null) state.slides = e.slides;
+        state.slideTitle = e.title == null ? null : e.title;
+      } else if (e.phase === 'auth') {
+        // 预检。platform（'darwin' | 'win32'）决定这一格说什么 —— Windows 上没有授权框。
+        // 老事件流没有这个字段，保持 null，按 mac 那套文案显示（跟以前一模一样）。
+        state.phase = 'auth';
+        if (e.platform != null) state.platform = e.platform;
       } else if (e.phase === 'done') {
         state.phase = 'done';
         state.current = null;
+        if (e.slides != null) state.slides = e.slides;
         state.result = {
           file: e.file == null ? null : e.file,
           shapes: e.shapes == null ? null : e.shapes,
@@ -100,6 +116,8 @@
 
     if (e.type === 'step') {
       if (e.total != null) state.total = e.total;
+      if (e.slides != null) state.slides = e.slides;
+      if (e.slide != null) state.slide = e.slide;
       // latest = 最近一条 step，不管 start 还是 done。大字始终显示它 ——
       // 只认 current 的话，一步画完到下一步开画之间那几百毫秒大字会空掉。
       state.latest = { i: e.i, kind: e.kind, id: e.id, label: e.label };
@@ -108,7 +126,10 @@
         if (state.t0 == null && t != null) state.t0 = t;
         state.current = { i: e.i, kind: e.kind, id: e.id, label: e.label };
       } else if (e.status === 'done') {
-        state.done.push({ i: e.i, kind: e.kind, id: e.id, label: e.label, ms: e.ms == null ? null : e.ms });
+        state.done.push({
+          i: e.i, kind: e.kind, id: e.id, label: e.label,
+          ms: e.ms == null ? null : e.ms, slide: e.slide == null ? null : e.slide
+        });
         if (state.current && state.current.i === e.i) state.current = null;
       }
       return;
@@ -174,6 +195,24 @@
     nums.lastElementChild.textContent = total == null ? '–' : String(total);
     $('bar').style.width = total ? Math.min(100, (doneN / total) * 100) + '%' : '0%';
 
+    // 多页时在进度上方挂一条「第 2/3 页 · 本页标题」。单页（或事件里没有页数）整条藏掉，
+    // 界面跟以前一模一样。
+    var deck = $('deck-page');
+    var multi = state.slides != null && state.slides > 1;
+    if (!multi) {
+      deck.hidden = true;
+      deck.textContent = '';
+    } else {
+      deck.hidden = false;
+      deck.textContent = '';
+      var at = state.slide == null ? 1 : state.slide;
+      deck.appendChild(el('span', 'deck-page-num', '第 ' + at + '/' + state.slides + ' 页'));
+      if (state.slideTitle) {
+        deck.appendChild(el('span', 'deck-page-dot', '·'));
+        deck.appendChild(el('span', 'deck-page-name', state.slideTitle));
+      }
+    }
+
     // 当前步骤
     var block = $('current-block');
     var line = $('current');
@@ -191,11 +230,19 @@
     sub.textContent = '';
     sub.hidden = true;
     if (state.phase === 'auth') {
-      // 授权确认：这一步在等 macOS 那个「豆包工作想要控制 Microsoft PowerPoint」的框。
-      // 必须把「在等什么、人该干什么」写在脸上 —— 不然就是 2026-09-12 实测那样：
-      // 面板停在布局完成一动不动，两分钟后冒一句 -1712，谁也想不到是个没弹出来的授权框。
-      plain('', '正在确认 PowerPoint 授权', 'auth');
-      sub.textContent = '若系统弹出授权框，请点「允许」';
+      // 预检。**分平台**，因为这一格在等的东西根本不是同一件事：
+      //   mac —— 在等「豆包工作想要控制 Microsoft PowerPoint」那个授权框。必须把
+      //     「在等什么、人该干什么」写在脸上：不然就是 2026-09-12 实测那样，面板停在
+      //     布局完成一动不动，两分钟后冒一句 -1712，谁也想不到是个没弹出来的授权框。
+      //   Windows —— **没有授权框这回事**（COM 驱动另一个进程不需要谁点允许）。
+      //     照抄 mac 文案会让人满屏找一个不存在的框。这一步只是在唤起 PowerPoint。
+      if (state.platform === 'win32') {
+        plain('', '正在唤起 PowerPoint', 'auth');
+        sub.textContent = '首次启动要等十几秒，不用点任何东西';
+      } else {
+        plain('', '正在确认 PowerPoint 授权', 'auth');
+        sub.textContent = '若系统弹出授权框，请点「允许」';
+      }
       sub.hidden = false;
     } else if (state.phase === 'saving') {
       plain('收尾', '正在保存…');
@@ -224,13 +271,21 @@
 
   function renderLog() {
     var list = $('done-list');
-    var rows = state.done.slice(-LOG_ROWS);
+    var all = state.done;
+    var start = Math.max(0, all.length - LOG_ROWS);
+    var rows = all.slice(start);
     var key = rows.length ? rows[rows.length - 1].i + ':' + rows.length : '';
     var fresh = key !== lastLogKey && rows.length > 0;
     if (fresh) { lastLogKey = key; rowFlip = 1 - rowFlip; }
+    var multi = state.slides != null && state.slides > 1;
 
     list.textContent = '';
     rows.forEach(function (d, idx) {
+      // 多页时每翻一页插一条分隔项，不然几十行完成记录看不出哪几行属于哪一页
+      var prev = all[start + idx - 1];
+      if (multi && d.slide != null && (!prev || prev.slide !== d.slide)) {
+        list.appendChild(el('div', 'log-sep', '第 ' + d.slide + ' 页'));
+      }
       var row = el('div', 'log-row');
       row.setAttribute('data-type', typeOf(d.kind));
       if (fresh && idx === rows.length - 1) row.setAttribute('data-in', rowFlip ? 'a' : 'b');
@@ -281,6 +336,12 @@
     box.appendChild(el('div', 'rule'));
 
     var stats = el('div', 'done-stats');
+    if (state.slides != null && state.slides > 1) {
+      var s0 = el('div', 'done-stat');
+      s0.appendChild(el('span', 'done-num', String(state.slides)));
+      s0.appendChild(el('span', 'done-label', '页'));
+      stats.appendChild(s0);
+    }
     if (r.shapes != null) {
       var s1 = el('div', 'done-stat');
       s1.appendChild(el('span', 'done-num', String(r.shapes)));

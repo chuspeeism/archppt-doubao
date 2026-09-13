@@ -46,7 +46,9 @@ function parseArgs(argv) {
 export function foldEvents(events) {
   const state = {
     phase: 'waiting', title: null, specPath: null, nodes: null, edges: null,
-    total: null, byKind: null, current: null, done: [], result: null, error: null, log: null,
+    total: null, byKind: null, slides: null, slide: null, slideTitle: null,
+    platform: null,
+    current: null, done: [], result: null, error: null, log: null,
   };
   for (const e of events) {
     if (!e || typeof e !== 'object') continue;
@@ -57,14 +59,29 @@ export function foldEvents(events) {
         state.specPath = e.specPath ?? null;
         state.nodes = e.nodes ?? null;
         state.edges = e.edges ?? null;
+        if (e.slides != null) state.slides = e.slides;
       } else if (e.phase === 'layout') {
         state.phase = 'layout';
         state.total = e.total ?? null;
         // byKind 是底部四类计数的分母：{"node":14,"edge":9,…}，只列出现过的 kind
         state.byKind = e.byKind && typeof e.byKind === 'object' ? e.byKind : null;
+        if (e.slides != null) state.slides = e.slides;
+      } else if (e.phase === 'slide') {
+        // 翻页。**不动 state.phase** —— slide 不是一个版面，只是「现在画到第几页」；
+        // 塞进 phase 会让面板去找一个不存在的版面，整块空掉。单页时压根不发这条。
+        state.slide = e.slide ?? null;
+        if (e.slides != null) state.slides = e.slides;
+        state.slideTitle = e.title ?? null;
+      } else if (e.phase === 'auth') {
+        // 预检。**带 platform**（'darwin' | 'win32'）—— 面板这一格的文案分平台：
+        // mac 在等那个「豆包工作想要控制 Microsoft PowerPoint」的授权框，
+        // Windows 上没有授权框，只是在唤起 PowerPoint。老事件没有这个字段，折出来是 null。
+        state.phase = 'auth';
+        if (e.platform != null) state.platform = e.platform;
       } else if (e.phase === 'done') {
         state.phase = 'done';
         state.current = null;
+        if (e.slides != null) state.slides = e.slides;
         state.result = {
           file: e.file ?? null, shapes: e.shapes ?? null,
           elapsedMs: e.elapsedMs ?? null, animation: e.animation !== false,
@@ -76,12 +93,14 @@ export function foldEvents(events) {
     }
     if (e.type === 'step') {
       if (e.total != null) state.total = e.total;
+      if (e.slides != null) state.slides = e.slides;
+      if (e.slide != null) state.slide = e.slide;
       if (e.status === 'start') {
         // 见到第一条 step 就从 layout 进 drawing —— drawing 是折叠出来的，事件里没有
         if (state.phase !== 'done' && state.phase !== 'error') state.phase = 'drawing';
         state.current = { i: e.i, kind: e.kind, id: e.id, label: e.label };
       } else if (e.status === 'done') {
-        state.done.push({ i: e.i, kind: e.kind, id: e.id, label: e.label, ms: e.ms ?? null });
+        state.done.push({ i: e.i, kind: e.kind, id: e.id, label: e.label, ms: e.ms ?? null, slide: e.slide ?? null });
         if (state.current && state.current.i === e.i) state.current = null;
       }
       continue;

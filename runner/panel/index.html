@@ -69,6 +69,8 @@
 
   <!-- 3 · 绘制中 ──────────────────────────────────────────── -->
   <div class="body body--draw" data-view="drawing" hidden>
+    <!-- 多页 PPT 才出现：「第 2/3 页 · 本页标题」。单页时整条藏掉，界面跟以前一样 -->
+    <div class="deck-page" id="deck-page" hidden></div>
     <div class="prog-head">
       <!-- 钩子 2：进度，读出来是 `12 / 34` -->
       <div class="prog-nums" id="progress"><span class="prog-now">0</span><span class="prog-slash"> / </span><span class="prog-total">0</span></div>

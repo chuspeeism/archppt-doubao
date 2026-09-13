@@ -22,10 +22,17 @@
 //      几何就完全按给定的盒子来（本文件实测 400/120/24 原样保持）。
 //   5. **纯矩形没有 `adjustment 1`**（-1728），圆角才有，所以圆角设置一律用 try 包住。
 //
-// 导出名：stepsToAppleScript / runDraw / APPLESCRIPT_RESERVED
+// 导出名：deckToAppleScript / runDrawDeck / stepsToAppleScript / runDraw / APPLESCRIPT_RESERVED
 //         POWERPOINT_NO_RESPONSE_CODES / noResponseCode / powerPointAuthMessage
 //         POWERPOINT_MISSING_CODES / missingPowerPointCode / powerPointMissingMessage
 //         POWERPOINT_STALLED_CODES / powerPointStalledMessage
+//
+// **一份 PPT 可以有多页。** deckToAppleScript / runDrawDeck 是多页版本，
+// stepsToAppleScript / runDraw 是它俩的单页包装（一个字都不许改口径：
+// `stepsToAppleScript(steps, o)` 的输出与 `deckToAppleScript([{ steps,
+// background: o.background, title: o.slideTitle }], o)` **逐字节相同**，
+// tests/mac-powerpoint-driver.test.mjs 里有一条测试钉着这条等式）。
+// Windows 驱动器（project/drivers/win-powerpoint.mjs，另一个会话在写）照同一份接口实现。
 
 import { spawn } from 'node:child_process';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
@@ -182,6 +189,46 @@ const textFrameLines = (ref, ops, align, anchor, padX) => {
     `\t\tset content of pTr to ${str(ops.map((o) => o.text).join('\n'))}`,
     `\t\tset alignment of paragraph format of pTr to ${ALIGN[align] || ALIGN.center}`,
   ];
+  // 字体：**整个 text range 各设一次**，不逐段 —— 一个形状里两段字用的是同一套族名，
+  // 逐段设只是白白多几次 Apple event。族名由 draw-steps 从 pptxFonts() 算好挂在 op 上
+  // （与原生 PPTX 导出同一份替身规则，见 docs/pptx-font-substitution.md）：
+  // `ASCII name` 管 0–127 的西文，`east asian name` 管中日韩。一句都不设的话，
+  // PowerPoint 会把文字落到主题字体（等线 / Calibri），中文西文都跟页面对不上。
+  //
+  // 两句各包一层 try：这两个属性在本机的字典里确实有（sdef 查得到），但老版本
+  // PowerPoint for Mac 未必；字典里没有就是 -1728，不包 try 会让**整次绘制**挂掉。
+  // op 上没挂字体字段时一句都不写（面板/旧调用方传进来的 op 仍旧照常画）。
+  //
+  // ⚠️ **`east asian name` 那句对苹方是个空操作，这是 PowerPoint 的老毛病，不是这里写错了。**
+  // 2026-09-13 在本机真 PowerPoint 上量的：`set east asian name … to "PingFang SC"` **不报错**，
+  // 回读却还是原值 —— 与写 "NoSuchFontXYZ" 的结果一模一样；换成 "Songti SC" / "Microsoft YaHei" /
+  // "SimSun" / "Heiti SC" 则立刻生效。根子是 docs/pptx-font-substitution.md §1 那条：
+  // Office 的字体表里根本没有 "PingFang SC"，按族名点名拿不到。所以：
+  //   * 苹方系皮肤（14 套里 11 套）这句写了等于没写，段落上留的是主题 EA（本机是「等线」，
+  //     而等线没装 → 系统级中日韩回退 → 画出来正好还是苹方）。这与原生 PPTX 导出写
+  //     `<a:ea typeface="PingFang SC"/>` 的**渲染结果一致**（那边同样点不中、同样回退）。
+  //   * academic 皮肤（Songti SC）这句是真生效的，所以不能因为「对苹方没用」就删掉。
+  // 也别改成写别的中文族来「让它生效」—— docs/pptx-font-substitution.md §2 实测过，
+  // 那样纯中文标题整片掉分（case-01 85.2%→77.7%）。PPTX_EA_SUB 保持为空是有代价换来的。
+  const fontOf = (key) => {
+    for (const o of ops) {
+      const v = o && o[key];
+      if (typeof v === 'string' && v !== '') return v;
+    }
+    return null;
+  };
+  const latin = fontOf('fontLatin');
+  const ea = fontOf('fontEa');
+  if (latin) {
+    out.push('\t\ttry');
+    out.push(`\t\t\tset ASCII name of font of pTr to ${str(latin)}`);
+    out.push('\t\tend try');
+  }
+  if (ea) {
+    out.push('\t\ttry');
+    out.push(`\t\t\tset east asian name of font of pTr to ${str(ea)}`);
+    out.push('\t\tend try');
+  }
   // 逐段设字号 / 字色 / 粗细：节点的「大标题 + 第二行小字」就靠这个，一个形状两段字。
   //
   // **段号要按每个 op 实际占几段累加**，不能拿 op 的序号当段号：content 是把所有 op 的
@@ -307,28 +354,59 @@ const emitOp = (o, animate) => {
 };
 
 /**
- * 绘制指令流 → 可直接交给 osascript 的 AppleScript 文本。
+ * 把 deck 的每一页归一成 `{ steps, background, title }`。空数组当一页空页处理，
+ * 免得下面到处判 length。
+ */
+const normalizeSlides = (slides) => {
+  const list = Array.isArray(slides) && slides.length ? slides : [{}];
+  return list.map((s) => ({
+    steps: Array.isArray(s && s.steps) ? s.steps : [],
+    background: s && s.background != null ? s.background : null,
+    title: s && s.title != null ? s.title : null,
+  }));
+};
+
+/**
+ * 多页 deck 的绘制指令流 → 可直接交给 osascript 的 AppleScript 文本。
+ *
+ * 一份 PPT 里可以有多套架构图：`slides` 每一项是**一页**，`steps` 是这一页自己
+ * `sceneToDrawSteps()` 的产物（每页各自从 1 编号）。**全局重编号在这里做** ——
+ * 生成的 `@@STEP` 标记里的 i = 之前各页步数之和 + 本页 step.i，total = 全 deck 步数之和。
+ * 这样面板上的进度条分母是整份 PPT，而不是每翻一页就从头数一遍。
+ *
+ * 页与页之间只差三句：新建一页（`make new slide at end`）、这一页自己的底色、
+ * 一条 `@@SLIDE <n> start`。**`save` 仍旧只在最后发一次**（坑 3：save 之后引用全失效）。
  *
  * 机器可读标记（都走 `log`，即 stderr）：
- *   `@@STEP <i> start` / `@@STEP <i> done` / `@@PHASE saving` / `@@PHASE done <绝对路径>`
+ *   `@@SLIDE <n> start`（每页第一步之前一条，单页时也发）
+ *   `@@STEP <i> start` / `@@STEP <i> done`（i 是全 deck 的连续编号）
+ *   `@@SHAPES <n>`（**每页一条**，调用方累加）
+ *   `@@PHASE saving` / `@@PHASE done <绝对路径>`
  *   `@@ANIM fail …` / `@@BG fail …`（尽力而为的两项失败时各报一次）
  *
- * @param {Array} steps sceneToDrawSteps() 的产物
+ * @param {Array<{steps: Array, background?: string|null, title?: string|null}>} slides 每项一页
  * @param {object} [options] delayMs 每步之后停多久（演示 400，出片 0）；outPath 另存路径；
- *                           slideTitle 仅用于注释；activate 是否把 PowerPoint 拉到前台；
- *                           background 幻灯片底色 `#RRGGBB`；animate 是否加进入动画
+ *                           activate 是否把 PowerPoint 拉到前台；animate 是否加进入动画
  */
-export function stepsToAppleScript(steps, options) {
+export function deckToAppleScript(slides, options) {
   const opts = options || {};
-  const list = Array.isArray(steps) ? steps : [];
+  const pages = normalizeSlides(slides);
   const delayMs = Number.isFinite(opts.delayMs) ? Math.max(0, opts.delayMs) : 0;
   const delaySec = Math.round(delayMs) / 1000;
   const animate = opts.animate !== false;
+  const grandTotal = pages.reduce((n, p) => n + p.steps.length, 0);
   const out = [];
 
   out.push('-- 由 project/drivers/mac-powerpoint.mjs 生成，不要手改');
-  if (opts.slideTitle) out.push(`-- 幻灯片：${comment(opts.slideTitle)}`);
-  out.push(`-- 共 ${list.length} 步`);
+  if (pages.length === 1) {
+    // 单页的头几行与多页刻意不同：stepsToAppleScript 走的就是这一支，
+    // 它的输出必须跟改多页之前一字不差（出货冒烟和一堆断言盯着这一段）。
+    if (pages[0].title) out.push(`-- 幻灯片：${comment(pages[0].title)}`);
+  } else {
+    out.push(`-- 共 ${pages.length} 页`);
+    pages.forEach((p, k) => { if (p.title) out.push(`-- 第 ${k + 1} 页：${comment(p.title)}`); });
+  }
+  out.push(`-- 共 ${grandTotal} 步`);
   out.push('');
   out.push('property pAnimOK : true');
   out.push('');
@@ -353,45 +431,63 @@ export function stepsToAppleScript(steps, options) {
   out.push('\t\t\t\tset layout of pSld to slide layout blank');
   out.push('\t\t\tend if');
   out.push('\t\tend timeout');
-  const bg = rgb(opts.background);
-  if (bg) {
-    // 底色能设就设，设不了只记一笔，不让整次绘制失败
+  // 底色能设就设，设不了只记一笔，不让整次绘制失败。每页各设各的。
+  const pushBackground = (hex) => {
+    const bg = rgb(hex);
+    if (!bg) return;
     out.push('\t\ttry');
     out.push('\t\t\tset follow master background of pSld to false');
     out.push(`\t\t\tset fore color of fill format of background of pSld to ${bg}`);
     out.push('\t\ton error pErr number pNum');
     out.push('\t\t\tmy emit("@@BG fail " & pErr & " (" & pNum & ")")');
     out.push('\t\tend try');
-  }
+  };
+  pushBackground(pages[0].background);
   if (!animate) out.push('\t\tset pAnimOK to false');
   out.push('\t\tmy emit("@@PHASE ready")');
-  out.push('');
 
-  for (const step of list) {
-    out.push(`\t\t-- [${step.i}/${step.total}] ${comment(step.kind)} ${comment(step.id)}`.trimEnd());
-    out.push(`\t\tmy emit("@@STEP ${step.i} start")`);
-    let shapeRef = null;
-    for (const o of step.ops || []) {
-      if (o.op === 'text') {
-        // text 不新建形状，把文字写进本 step 刚建的那个形状里
-        if (!shapeRef) continue;
-        const group = (step.ops || []).filter((t) => t.op === 'text');
-        if (o !== group[0]) continue; // 一个形状一次写完全部段落
-        out.push(...textFrameLines(shapeRef, group, o.align, o.anchor, o.padX));
-        continue;
-      }
-      const res = emitOp(o, animate);
-      out.push(...res.lines);
-      if (res.shapeRef) shapeRef = res.shapeRef;
+  let offset = 0;   // 之前各页的步数之和 —— 全局重编号的底数
+  pages.forEach((page, p) => {
+    if (p > 0) {
+      out.push('');
+      if (page.title) out.push(`\t\t-- 第 ${p + 1} 页：${comment(page.title)}`);
+      out.push('\t\tset pSld to make new slide at end of pPres with properties {layout:slide layout blank}');
+      pushBackground(page.background);
     }
-    out.push(`\t\tmy emit("@@STEP ${step.i} done")`);
-    if (delaySec > 0) out.push(`\t\tdelay ${delaySec}`);
+    out.push(`\t\tmy emit("@@SLIDE ${p + 1} start")`);
     out.push('');
-  }
 
-  out.push('\t\tmy emit("@@SHAPES " & (count of shapes of pSld))');
+    for (const step of page.steps) {
+      const gi = offset + step.i;
+      out.push(`\t\t-- [${gi}/${grandTotal}] ${comment(step.kind)} ${comment(step.id)}`.trimEnd());
+      out.push(`\t\tmy emit("@@STEP ${gi} start")`);
+      let shapeRef = null;
+      for (const o of step.ops || []) {
+        if (o.op === 'text') {
+          // text 不新建形状，把文字写进本 step 刚建的那个形状里
+          if (!shapeRef) continue;
+          const group = (step.ops || []).filter((t) => t.op === 'text');
+          if (o !== group[0]) continue; // 一个形状一次写完全部段落
+          out.push(...textFrameLines(shapeRef, group, o.align, o.anchor, o.padX));
+          continue;
+        }
+        const res = emitOp(o, animate);
+        out.push(...res.lines);
+        if (res.shapeRef) shapeRef = res.shapeRef;
+      }
+      out.push(`\t\tmy emit("@@STEP ${gi} done")`);
+      if (delaySec > 0) out.push(`\t\tdelay ${delaySec}`);
+      out.push('');
+    }
+
+    // 形状数每页各报一次，调用方累加成整份 PPT 的总数
+    out.push('\t\tmy emit("@@SHAPES " & (count of shapes of pSld))');
+    offset += page.steps.length;
+  });
+
   if (opts.outPath) {
-    // 坑 3：save as 之后所有引用作废，所以 save 是最后一步，后面不再碰任何形状
+    // 坑 3：save as 之后所有引用作废，所以 save 是最后一步，后面不再碰任何形状。
+    // 多页也只在这里存一次 —— 每页存一次会把前面几页的引用全废掉。
     out.push('\t\tmy emit("@@PHASE saving")');
     out.push(`\t\tsave pPres in (POSIX file ${str(opts.outPath)}) as save as Open XML presentation`);
     out.push(`\t\tmy emit("@@PHASE done " & ${str(opts.outPath)})`);
@@ -405,18 +501,45 @@ export function stepsToAppleScript(steps, options) {
 }
 
 /**
- * 生成脚本 → 跑 osascript → 逐行把标记翻译成事件。
+ * 单页包装。**输出与 `deckToAppleScript([{ steps, background: options.background,
+ * title: options.slideTitle }], options)` 逐字节相同** —— 这里就是那么调的，
+ * 别改成第二份实现。
  *
- * @param {Array} steps
- * @param {object} options 同 stepsToAppleScript，另加 keepScript（留下临时脚本便于排错）
- * @param {(event: object) => void} [onEvent] 事件回调，形状见 shells/doubao/runner/panel/CONTRACT.md
- * @returns {Promise<{file: string|null, shapes: number|null, elapsedMs: number, animation: boolean, script: string}>}
+ * @param {Array} steps sceneToDrawSteps() 的产物
+ * @param {object} [options] 同 deckToAppleScript，另加 slideTitle（仅用于注释）与
+ *                           background（这一页的底色 `#RRGGBB`）
  */
-export function runDraw(steps, options, onEvent) {
+export function stepsToAppleScript(steps, options) {
   const opts = options || {};
-  const list = Array.isArray(steps) ? steps : [];
-  const byIndex = new Map(list.map((s) => [s.i, s]));
-  const script = stepsToAppleScript(list, opts);
+  return deckToAppleScript(
+    [{ steps: Array.isArray(steps) ? steps : [], background: opts.background, title: opts.slideTitle }],
+    opts,
+  );
+}
+
+/**
+ * 生成脚本 → 跑 osascript → 逐行把标记翻译成事件。**多页版**。
+ *
+ * @param {Array<{steps: Array, background?: string|null, title?: string|null}>} slides 每项一页
+ * @param {object} options 同 deckToAppleScript，另加 keepScript（留下临时脚本便于排错）
+ * @param {(event: object) => void} [onEvent] 事件回调，形状见 shells/doubao/runner/panel/CONTRACT.md
+ * @returns {Promise<{file: string|null, shapes: number|null, elapsedMs: number,
+ *                    animation: boolean, script: string, slides: number}>}
+ *          shapes 是各页 `@@SHAPES` 之和，slides 是页数
+ */
+export function runDrawDeck(slides, options, onEvent) {
+  const opts = options || {};
+  const pages = normalizeSlides(slides);
+  const slideCount = pages.length;
+  // 全局编号 → { step, slide }。编号口径与 deckToAppleScript 里那份**必须一致**：
+  // 之前各页步数之和 + 本页 step.i。
+  const byIndex = new Map();
+  let grandTotal = 0;
+  pages.forEach((page, p) => {
+    for (const s of page.steps) byIndex.set(grandTotal + s.i, { step: s, slide: p + 1 });
+    grandTotal += page.steps.length;
+  });
+  const script = deckToAppleScript(pages, opts);
   const dir = mkdtempSync(join(tmpdir(), 'doubao-draw-'));
   const scriptPath = join(dir, 'draw.applescript');
   writeFileSync(scriptPath, script, 'utf8');
@@ -431,6 +554,7 @@ export function runDraw(steps, options, onEvent) {
     let animation = opts.animate !== false;
     let shapes = null;
     let file = null;
+    let currentSlide = 1;
     // 「画到哪儿了」。-1712 的判词分两段全靠这两个开关（见 powerPointStalledMessage）：
     // 收到过任何一条 `@@STEP … done`，或者已经进了 `@@PHASE saving`，就不是授权问题了。
     let drewAny = false;
@@ -447,22 +571,41 @@ export function runDraw(steps, options, onEvent) {
       let m = line.match(/@@STEP\s+(\d+)\s+(start|done)/);
       if (m) {
         const i = Number(m[1]);
-        const step = byIndex.get(i) || {};
+        const found = byIndex.get(i) || {};
+        const step = found.step || {};
+        const slide = found.slide || currentSlide;
         if (m[2] === 'start') {
           startedAt.set(i, Date.now());
-          emit({ type: 'step', i, total: list.length, kind: step.kind, id: step.id, label: step.label, status: 'start' });
+          emit({
+            type: 'step', i, total: grandTotal, kind: step.kind, id: step.id, label: step.label,
+            status: 'start', slide, slides: slideCount,
+          });
         } else {
           drewAny = true;
           const t0 = startedAt.get(i);
           emit({
-            type: 'step', i, total: list.length, kind: step.kind, id: step.id, label: step.label,
-            status: 'done', ms: t0 ? Date.now() - t0 : 0,
+            type: 'step', i, total: grandTotal, kind: step.kind, id: step.id, label: step.label,
+            status: 'done', ms: t0 ? Date.now() - t0 : 0, slide, slides: slideCount,
           });
         }
         return;
       }
+      m = line.match(/@@SLIDE\s+(\d+)\s+start/);
+      if (m) {
+        currentSlide = Number(m[1]);
+        // 单页时不发 phase:slide —— 只有一页的事件流跟以前一模一样，面板不必多显示一行
+        if (slideCount > 1) {
+          const page = pages[currentSlide - 1];
+          emit({
+            type: 'phase', phase: 'slide', slide: currentSlide, slides: slideCount,
+            title: page ? page.title : null,
+          });
+        }
+        return;
+      }
+      // 每页各报一条 @@SHAPES，累加成整份 PPT 的形状总数
       m = line.match(/@@SHAPES\s+(\d+)/);
-      if (m) { shapes = Number(m[1]); return; }
+      if (m) { shapes = (shapes || 0) + Number(m[1]); return; }
       m = line.match(/@@PHASE\s+saving/);
       if (m) { sawSaving = true; emit({ type: 'phase', phase: 'saving' }); return; }
       m = line.match(/@@PHASE\s+done\s*(.*)$/);
@@ -534,7 +677,25 @@ export function runDraw(steps, options, onEvent) {
         elapsedMs: Date.now() - started,
         animation,
         script: kept || script,
+        slides: slideCount,
       });
     });
   });
+}
+
+/**
+ * 单页包装。跟 stepsToAppleScript 一样，只是把参数摊成一页交给 runDrawDeck，
+ * 不是第二份实现。
+ *
+ * @param {Array} steps
+ * @param {object} options 同 runDrawDeck，另加 slideTitle 与 background（这一页的）
+ * @param {(event: object) => void} [onEvent]
+ */
+export function runDraw(steps, options, onEvent) {
+  const opts = options || {};
+  return runDrawDeck(
+    [{ steps: Array.isArray(steps) ? steps : [], background: opts.background, title: opts.slideTitle }],
+    opts,
+    onEvent,
+  );
 }

@@ -49,6 +49,31 @@ node run.mjs <spec.json> --delay 350
 `已保存：<pptx 绝对路径>`；`--dry-run` 时是 `DRY-OK steps=<n> shapes=<n>`；
 失败退出码非 0，最后一行 `失败：<原因>`。
 
+### 一份 PPT 里画多套架构图（多页）
+
+两种写法，效果一样：
+
+```bash
+# ① 一份 deck 文件：{"title":"整套的名字","slides":[ 单图 spec, 单图 spec ]}
+node run.mjs deck.json --delay 350
+
+# ② 多个位置参数，顺序就是页序（其中任何一份自己又是 deck 就把它的 slides 展开接进去）
+node run.mjs 订单.json 支付.json --delay 350
+```
+
+- 每一页各自写自己的 `title` / `subtitle` / `layout` / `direction` / `nodes` / `edges`，
+  各选各的版式，页与页之间的 id 不用避让。deck 顶层的 `title` 只是整套的名字，不画进任何一页。
+- 顶层写了 `slides` 就不许再写 `nodes` / `edges`（直接报错）；`slides` 不能是空数组。
+- 每一页各自过校验，报错和告警带上 `slides[i]:` 前缀（**i 从 0 起，跟数组下标一致**），
+  例如 `失败：slides[1]: spec 校验失败：title 不能为空`。
+- **没有 `slides` 的单图 spec 行为一个字都不变**，包括 `DRY-OK steps=n shapes=n` 那一行。
+- 多页时：`--dry-run` 的结论行是 `DRY-OK steps=<n> shapes=<n> slides=<k>`（n、m 都是全 deck 之和）；
+  真跑时 `已保存：` 的**上面一行**多打一句 `共 k 页`（最后一行仍旧只有 `已保存：`）。
+- 面板上会显示「第 2/3 页 · 本页标题」，已完成列表按页加分隔项；进度条的分母是整份 PPT 的步数。
+- 引擎侧接口是 `deckToAppleScript(slides, options)` / `runDrawDeck(slides, options, onEvent)`
+  （`project/drivers/mac-powerpoint.mjs`）。`stepsToAppleScript` / `runDraw` 是它俩的单页包装，
+  输出逐字节相同，不是第二份实现。`save` 全程只发一次（坑 3）。
+
 **退出码 3 单独表示「PowerPoint 没应答、要人去点授权框」**，最后一行是
 `失败：需要授权 —— PowerPoint 没有响应（-1712）。第一次使用需要在系统弹出的…`。
 **退出码 4 单独表示「本机没装桌面版 PowerPoint」**（探针报 `-1728`），最后一行是
@@ -118,6 +143,9 @@ node draw.mjs <spec.json> --delay 400 --events .state/steps.jsonl --append
 
 ```bash
 cd <技能目录>/runner && node draw.mjs <你的 spec.json> --delay 400
+
+# 多页同理：一份 deck 文件，或多个位置参数
+cd <技能目录>/runner && node draw.mjs 订单.json 支付.json --delay 400
 ```
 
 `draw.mjs` 的参数：
@@ -136,10 +164,50 @@ cd <技能目录>/runner && node draw.mjs <你的 spec.json> --delay 400
 （要点授权框）/ `5` 画起来之后 PowerPoint 中途无响应（前台压着对话框）/ `1` 其它。
 `--out` 的落点护栏 `draw.mjs` 与 `run.mjs` 同一份（同一个 `checkOutPath`）。
 
+## 怎么验收
+
+**一条命令，产出一个 zip 证据包。** 拿到一台新机器（尤其是 Windows），别一条条手工比对，
+跑这个：
+
+```bash
+node verify.mjs
+```
+
+它自己跑完这几步，每步在 stdout 打一行人话，**最后两行固定**是
+`结论：通过` / `结论：失败 —— <一句话>` 和 `验收包：<zip 绝对路径>`（退出码 0 = 通过）：
+
+| 步 | 干什么 | 证明什么 |
+|---|---|---|
+| ① 环境 | 平台、Node、技能目录、引擎根、桌面在哪；Windows 上顺带记 PowerShell 版本 | 装对地方了 |
+| ② 干跑 | `run.mjs --dry-run` | 引擎算得出来（不碰 PowerPoint） |
+| ③ 真画单页 | `run.mjs <spec> --no-open --keep-panel 0`，同时**每 500ms 截一张全屏** | 画得出来，而且**看得见在画** |
+| ④ 真画两页 deck | 第一页 = `--spec`，第二页是写死在 verify.mjs 里的 6 节点小图 | 一份 PPT 里多套架构图也成立 |
+| ⑤ 核对 | 解包 pptx 逐页数 `<p:sp>` + `<p:cxnSp>`、找标题、查事件流 start/done 配对 | 画出来的**确实是**那张图 |
+| ⑥⑦ 报告 + 打包 | `验收报告.md` + 全部证据打成一个 zip | 判读不用在这台机器上做 |
+
+| 参数 | 默认 | 说明 |
+|---|---|---|
+| `--quick` | 关 | 跳过第 ④ 步，只验单页 |
+| `--delay <毫秒>` | 350 | 传给 `run.mjs` 的逐步延时。**别设 0** —— 设 0 就看不见「逐个画」了 |
+| `--out-dir <目录>` | `<桌面>/架构图验收-<时间戳>/` | 证据落在哪。**得在桌面/文稿/下载底下**，PowerPoint 沙盒只对这几处默认放行 |
+| `--spec <json>` | 引擎根的 `diagram.json` | 第一页用哪份 spec。**出货包里没有 `diagram.json`**（清单不投影它），那边会自动退回 verify.mjs 内置的兜底示例，并把它写进证据目录 |
+
+包里是：`验收报告.md`（开头一段人话直接回答「能跑通吗」「能看见逐个画吗」）、`env.json`、
+两份 pptx、两份 `steps-*.jsonl` 事件流、两个 `shots-*/` 截图目录。
+
+**任何一步失败都照样出包**，退出码 1、报告里写清卡在哪一步、`run.mjs` 的最后 20 行原文原样贴上。
+这条命令是给「远端有个代理替我们执行、他不排错只把包发回来」这个场景设计的 ——
+所以别在失败时提前退出。
+
+截图靠 macOS 的 `screencapture`（缩到长边 1600 再存）/ Windows 的一个常驻 PowerShell
+子进程（`System.Drawing` + `CopyFromScreen`）。最多 240 张（2 分钟）就停。
+macOS 上截出来是空的，多半是本机没给终端「屏幕录制」权限 —— 报告里会点出这一条。
+
 ## 这条链上每个文件干什么
 
 ```
 run.mjs                零人工入口：面板 + 画 + 报路径，一条命令跑完（豆包技能包用这条）
+verify.mjs             验收包：一条命令跑完全流程 + 连拍屏幕 + 解包核对 + 打 zip；失败也出包
 start.command          一键启动器：把下面三个串起来（人在场、等剪贴板的那条路）
 watch-clipboard.mjs    等剪贴板 → 剥围栏 → 校验 → 落盘 inbox/，打印 accepted 事件
 draw.mjs               spec → 布局 → 绘制指令 → 驱动 PowerPoint → 事件 → pptx；同时是 run.mjs 的库

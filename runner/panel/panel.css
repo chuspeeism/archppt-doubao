@@ -157,6 +157,13 @@ body{font-family:var(--font-ui);-webkit-font-smoothing:antialiased;text-renderin
 .cta-text{font-size:24px;font-weight:500;color:var(--primary-ink);letter-spacing:.02em;line-height:1.4;white-space:nowrap;flex:0 0 auto}
 
 /* 3 · 绘制中 */
+/* 多页 PPT 才出现的一行「第 2/3 页 · 本页标题」。单页时 panel.js 把它 hidden 掉。 */
+.deck-page{display:flex;align-items:baseline;gap:.4em;margin-top:20px;font-size:var(--fs-kicker);letter-spacing:.06em;color:var(--ink-3);white-space:nowrap;overflow:hidden}
+.deck-page-num{color:var(--primary);font-variant-numeric:tabular-nums;letter-spacing:.04em}
+.deck-page-name{min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--ink-2)}
+/* 已完成列表里的翻页分隔项 */
+.log-sep{flex:0 0 auto;display:flex;align-items:center;gap:10px;height:var(--row-h);font-size:calc(var(--fs-row) * .9);letter-spacing:.08em;color:var(--ink-3)}
+.log-sep::after{content:"";flex:1;height:1px;background:var(--hairline)}
 .prog-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-top:24px}
 .prog-nums{display:flex;align-items:baseline;font-variant-numeric:tabular-nums;line-height:1}
 .prog-now{font-size:var(--fs-progress);font-weight:500;color:var(--primary)}

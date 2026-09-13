@@ -7,7 +7,12 @@
 // 「怎么画」（AppleScript 怎么写、形状怎么建）是驱动器的事，这里一个字都不管。
 //
 // 排版口径不在这里重写：字号自适应、变体配色、结构 token、连线权重全部 import 自
-// scene-svg.mjs —— 它是排版的唯一来源。draw-steps 与 scene-pptx 是同一份 Scene 的
+// scene-svg.mjs —— 它是排版的唯一来源。**字体同理**：西文 / 中日韩两个族名 import 自
+// scene-pptx.mjs 的 pptxFonts()，与原生 PPTX 导出共用同一份替身规则
+// （两步替身的来龙去脉见 docs/pptx-font-substitution.md）。驱动器不设字体的话，
+// PowerPoint 会把文字落到主题字体（等线 / 等线 Light / Calibri）上，而卡片宽、药丸宽
+// 都是按苹方估的，渲成等线就对不齐 —— 这是「驱动器画出来的那张看着旧」最扎眼的一条。
+// draw-steps 与 scene-pptx 是同一份 Scene 的
 // 两个消费者，绘制顺序也刻意保持一致（背景 → 标题/副标题 → 容器 → 节点 → 文字 →
 // 全部边线 → 全部边标签），这样「一步步画出来的那张」和「一次性导出的那张」是同一张图。
 //
@@ -19,7 +24,7 @@
 
 import { SCENE_THEME_DEFAULTS, svgFitFontSize, svgEstimateTextWidth, svgVariantStyle, svgMetric, svgMetricRaw, svgLenPx, svgPanelLabelPaint, svgEdgeWeight, svgEdgeInk } from './scene-svg.mjs';
 import { dmlColor } from './drawingml.mjs';
-import { PPTX_TEXT_METRICS } from './scene-pptx.mjs';
+import { PPTX_TEXT_METRICS, pptxFonts } from './scene-pptx.mjs';
 
 /** step.kind 的全集。面板只认这六种，别的一律不许出现（见 shells/doubao/runner/panel/CONTRACT.md）。 */
 export const DRAW_STEP_KINDS = Object.freeze(['title', 'subtitle', 'container', 'node', 'edge', 'label']);
@@ -136,6 +141,9 @@ export function sceneToDrawSteps(scene, theme, options) {
   const containers = Array.isArray(scene.containers) ? scene.containers : [];
   const edges = Array.isArray(scene.edges) ? scene.edges : [];
   const geo = geoOf(palette);
+  // 皮肤的 CSS 字体栈 → PPT 的两个字段（西文 a:latin / 中日韩 a:ea）。等宽皮肤（terminal）
+  // 得到等宽族、衬线皮肤（journal）得到衬线族，跟着皮肤走，这里不做第二套判断。
+  const fonts = pptxFonts(palette);
   const pageBg = flattenColor(palette.background, '#FFFFFF') || '#FFFFFF';
   const backdrops = buildBackdrops(scene, palette, pageBg);
 
@@ -151,6 +159,8 @@ export function sceneToDrawSteps(scene, theme, options) {
     x: S(box.x), y: S(box.y), w: S(box.w), h: S(box.h),
     text: String(text),
     fontSize: S(font),
+    fontLatin: fonts.latin,
+    fontEa: fonts.ea,
     color,
     align: align || 'center',
     anchor: 'middle',
@@ -278,6 +288,7 @@ export function sceneToDrawSteps(scene, theme, options) {
       const font = svgFitFontSize(label, labelBase, availW, Math.min(15, labelBase));
       ops.push({
         op: 'text', text: label, fontSize: S(font),
+        fontLatin: fonts.latin, fontEa: fonts.ea,
         color: flattenColor(style.label, inside) || flattenColor(palette.text, inside),
         align: 'center', anchor: 'middle', bold: true,
       });
@@ -286,6 +297,7 @@ export function sceneToDrawSteps(scene, theme, options) {
       const font = svgFitFontSize(sublabel, subBase, availW, Math.min(15, subBase));
       ops.push({
         op: 'text', text: sublabel, fontSize: S(font),
+        fontLatin: fonts.latin, fontEa: fonts.ea,
         color: flattenColor(palette.textSecondary, inside) || '#666666',
         align: 'center', anchor: 'middle', bold: false,
       });
