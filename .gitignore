@@ -1,0 +1,6 @@
+.DS_Store
+node_modules/
+*.log
+
+# 运行时本地状态：豆包写进来的 spec、事件流、截图证据。每次跑都重新生成，不入库。
+runner/.state/

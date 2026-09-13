@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>架构图绘制 · 步骤面板</title>
+<!--
+  面板只依赖 CONTRACT.md 的事件流，不读 spec、不读 pptx、不认识引擎。
+  换皮的人改样式和结构，**不要改下面这六个 id**：
+    #phase  #progress  #current  #done-list  #result  #error
+
+  版式：默认 960×540（wide）；?layout=tall 或视口高宽比 > 1.2 时切 640×1080（tall）。
+  ?demo=1 不连 SSE，页内自动播放一遍（录屏彩排 / 与设计稿对照用）。
+-->
+<link rel="stylesheet" href="panel.css">
+</head>
+<body>
+<div class="panel" id="panel" data-panel="wide" data-state="waiting">
+  <div class="panel-line"></div>
+  <div class="panel-glow"></div>
+
+  <div class="panel-head">
+    <div class="head-state">
+      <span class="state-dot"></span>
+      <!-- 钩子 1：当前阶段的人话 -->
+      <span class="state-name" id="phase">连接中</span>
+    </div>
+    <div class="head-clock" id="clock" hidden>
+      <span class="clock-label">累计用时</span>
+      <span class="clock-num" id="elapsed">0.0</span>
+      <span class="clock-unit">s</span>
+    </div>
+  </div>
+
+  <!-- 1 · 等待 ────────────────────────────────────────────── -->
+  <div class="body body--idle" data-view="waiting">
+    <div class="pulse">
+      <span class="pulse-core"></span>
+      <span class="pulse-ring"></span>
+      <span class="pulse-ring pulse-ring--late"></span>
+    </div>
+    <div class="hero">等待架构描述</div>
+    <div class="sub">在对话里点「复制」即可开始</div>
+  </div>
+
+  <!-- 2 · 已收到 ──────────────────────────────────────────── -->
+  <div class="body body--ready" data-view="received" hidden>
+    <div>
+      <div class="eyebrow">已收到架构描述</div>
+      <div class="title" id="spec-title"></div>
+    </div>
+    <div class="counts">
+      <div class="count" data-type="node">
+        <span class="count-mark"></span>
+        <span class="count-num" id="spec-nodes">–</span>
+        <span class="count-label">节点</span>
+      </div>
+      <div class="count" data-type="edge">
+        <span class="count-mark"></span>
+        <span class="count-num" id="spec-edges">–</span>
+        <span class="count-label">连线</span>
+      </div>
+    </div>
+    <div class="cta">
+      <span class="cta-glyph"></span>
+      <span class="cta-text">开始绘制</span>
+    </div>
+  </div>
+
+  <!-- 3 · 绘制中 ──────────────────────────────────────────── -->
+  <div class="body body--draw" data-view="drawing" hidden>
+    <div class="prog-head">
+      <!-- 钩子 2：进度，读出来是 `12 / 34` -->
+      <div class="prog-nums" id="progress"><span class="prog-now">0</span><span class="prog-slash"> / </span><span class="prog-total">0</span></div>
+      <div class="prog-label">步骤已完成</div>
+    </div>
+    <div class="bar">
+      <div class="bar-fill" id="bar"></div>
+      <div class="bar-sweep"></div>
+    </div>
+
+    <div class="current" id="current-block" data-type="node">
+      <span class="current-mark"></span>
+      <div class="current-text">
+        <div class="current-eyebrow" id="current-eyebrow">正在绘制</div>
+        <!-- 钩子 3：正在画的那一步 -->
+        <div class="current-line" id="current"><span class="current-tag"></span><span class="current-dot"></span><span class="current-name"></span></div>
+        <!-- 副文：只有授权确认阶段用得上（告诉人去点那个框），别的阶段藏着 -->
+        <div class="current-sub" id="current-sub" hidden></div>
+      </div>
+    </div>
+
+    <div class="logwrap">
+      <div class="rule"></div>
+      <!-- 钩子 4：已完成步骤列表 -->
+      <div class="log" id="done-list"></div>
+    </div>
+  </div>
+
+  <!-- 4 · 完成 ────────────────────────────────────────────── -->
+  <div class="body body--done" data-view="done" hidden>
+    <div class="done-head">
+      <svg class="done-check" width="62" height="62" viewBox="0 0 62 62" fill="none">
+        <circle cx="31" cy="31" r="29" stroke="var(--success)" stroke-width="2" opacity=".55"></circle>
+        <circle cx="31" cy="31" r="29" fill="var(--success)" opacity=".1"></circle>
+        <path d="M19 32.5 L27.5 41 L43 24" stroke="var(--success)" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"></path>
+      </svg>
+      <div class="hero">已保存</div>
+    </div>
+    <!-- 钩子 5：结果（文件名 / 路径 / 形状数 / 用时），没结果时为空 -->
+    <div class="done-body" id="result"></div>
+  </div>
+
+  <!-- 5 · 错误 ────────────────────────────────────────────── -->
+  <div class="body body--error" data-view="error" hidden>
+    <div class="err-head">
+      <span class="err-badge">!</span>
+      <div class="err-title">绘制中断</div>
+    </div>
+    <!-- 钩子 6：出错信息，没出错时是空的 -->
+    <div class="err-msg" id="error"></div>
+    <div class="err-note" id="error-note"></div>
+    <div class="err-cta">
+      <span class="err-cta-text">重试</span>
+      <span class="err-cta-note">或在对话里重新发送</span>
+    </div>
+  </div>
+
+  <div class="legend" id="legend" hidden></div>
+</div>
+
+<script src="panel.js"></script>
+</body>
+</html>

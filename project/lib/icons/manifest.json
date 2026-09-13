@@ -1,0 +1,775 @@
+[
+  {
+    "slug": "googlecloud",
+    "name": "Google Cloud",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#4285F4"
+  },
+  {
+    "slug": "alibabacloud",
+    "name": "Alibaba Cloud",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#FF6A00"
+  },
+  {
+    "slug": "cloudflare",
+    "name": "Cloudflare",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#F38020",
+    "guidelines": "https://www.cloudflare.com/trademark/"
+  },
+  {
+    "slug": "digitalocean",
+    "name": "DigitalOcean",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#0080FF",
+    "guidelines": "https://www.digitalocean.com/press/"
+  },
+  {
+    "slug": "vercel",
+    "name": "Vercel",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#000000",
+    "guidelines": "https://vercel.com/geist/brands"
+  },
+  {
+    "slug": "netlify",
+    "name": "Netlify",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#00C7B7",
+    "guidelines": "https://www.netlify.com/press/"
+  },
+  {
+    "slug": "docker",
+    "name": "Docker",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#2496ED"
+  },
+  {
+    "slug": "kubernetes",
+    "name": "Kubernetes",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#326CE5"
+  },
+  {
+    "slug": "terraform",
+    "name": "Terraform",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#844FBA",
+    "guidelines": "https://www.hashicorp.com/brand"
+  },
+  {
+    "slug": "openstack",
+    "name": "OpenStack",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#ED1944",
+    "guidelines": "https://www.openstack.org/brand/openstack-logo/"
+  },
+  {
+    "slug": "vmware",
+    "name": "VMware",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#607078"
+  },
+  {
+    "slug": "redis",
+    "name": "Redis",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#FF4438",
+    "guidelines": "https://redis.io/brand-guidelines"
+  },
+  {
+    "slug": "postgresql",
+    "name": "PostgreSQL",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#4169E1",
+    "guidelines": "https://www.postgresql.org/about/policies/trademarks/"
+  },
+  {
+    "slug": "mongodb",
+    "name": "MongoDB",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#47A248"
+  },
+  {
+    "slug": "mysql",
+    "name": "MySQL",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#4479A1",
+    "guidelines": "https://www.mysql.com/about/legal/logos.html"
+  },
+  {
+    "slug": "elasticsearch",
+    "name": "Elasticsearch",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#005571"
+  },
+  {
+    "slug": "sqlite",
+    "name": "SQLite",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#003B57"
+  },
+  {
+    "slug": "mariadb",
+    "name": "MariaDB",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#003545",
+    "guidelines": "https://mariadb.com/about-us/logos/"
+  },
+  {
+    "slug": "clickhouse",
+    "name": "ClickHouse",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#FFCC01"
+  },
+  {
+    "slug": "snowflake",
+    "name": "Snowflake",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#29B5E8",
+    "guidelines": "https://www.snowflake.com/brand-guidelines/"
+  },
+  {
+    "slug": "supabase",
+    "name": "Supabase",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#3FCF8E"
+  },
+  {
+    "slug": "neo4j",
+    "name": "Neo4j",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#4581C3",
+    "guidelines": "https://neo4j.com/brand/#logo"
+  },
+  {
+    "slug": "influxdb",
+    "name": "InfluxDB",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#22ADF6",
+    "guidelines": "https://influxdata.github.io/branding/logo/usage/"
+  },
+  {
+    "slug": "milvus",
+    "name": "Milvus",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#00A1EA"
+  },
+  {
+    "slug": "minio",
+    "name": "MinIO",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#C72E49",
+    "guidelines": "https://min.io/logo"
+  },
+  {
+    "slug": "rabbitmq",
+    "name": "RabbitMQ",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#FF6600",
+    "guidelines": "https://www.rabbitmq.com/trademark-guidelines.html"
+  },
+  {
+    "slug": "celery",
+    "name": "Celery",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#37814A"
+  },
+  {
+    "slug": "anthropic",
+    "name": "Anthropic",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#191919"
+  },
+  {
+    "slug": "claude",
+    "name": "Claude",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#D97757"
+  },
+  {
+    "slug": "googlegemini",
+    "name": "Google Gemini",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#8E75B2"
+  },
+  {
+    "slug": "deepseek",
+    "name": "DeepSeek",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#5786FE"
+  },
+  {
+    "slug": "mistralai",
+    "name": "Mistral AI",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#FA520F"
+  },
+  {
+    "slug": "qwen",
+    "name": "QWen",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#6950EF"
+  },
+  {
+    "slug": "huggingface",
+    "name": "Hugging Face",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#FFD21E",
+    "guidelines": "https://huggingface.co/brand"
+  },
+  {
+    "slug": "pytorch",
+    "name": "PyTorch",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#EE4C2C",
+    "guidelines": "https://github.com/pytorch/pytorch.github.io/blob/381117ec296f002b2de475402ef29cca6c55e209/assets/brand-guidelines/PyTorch-Brand-Guidelines.pdf"
+  },
+  {
+    "slug": "tensorflow",
+    "name": "TensorFlow",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#FF6F00"
+  },
+  {
+    "slug": "langchain",
+    "name": "LangChain",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#7FC8FF"
+  },
+  {
+    "slug": "ollama",
+    "name": "Ollama",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#000000"
+  },
+  {
+    "slug": "nvidia",
+    "name": "NVIDIA",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#76B900"
+  },
+  {
+    "slug": "perplexity",
+    "name": "Perplexity",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#1FB8CD"
+  },
+  {
+    "slug": "react",
+    "name": "React",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#61DAFB"
+  },
+  {
+    "slug": "svelte",
+    "name": "Svelte",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#FF3E00"
+  },
+  {
+    "slug": "nextjs",
+    "name": "Next.js",
+    "source": "simple-icons@16.28.0#nextdotjs",
+    "license": "CC0-1.0",
+    "color": "#000000",
+    "guidelines": "https://vercel.com/design/brands#next-js"
+  },
+  {
+    "slug": "nuxt",
+    "name": "Nuxt",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#00DC82",
+    "guidelines": "https://nuxt.com/design-kit"
+  },
+  {
+    "slug": "typescript",
+    "name": "TypeScript",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#3178C6",
+    "guidelines": "https://www.typescriptlang.org/branding"
+  },
+  {
+    "slug": "tailwindcss",
+    "name": "Tailwind CSS",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#06B6D4",
+    "guidelines": "https://tailwindcss.com/brand"
+  },
+  {
+    "slug": "vite",
+    "name": "Vite",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#9135FF"
+  },
+  {
+    "slug": "html5",
+    "name": "HTML5",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#E34F26"
+  },
+  {
+    "slug": "flutter",
+    "name": "Flutter",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#02569B",
+    "guidelines": "https://flutter.dev/brand"
+  },
+  {
+    "slug": "electron",
+    "name": "Electron",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#47848F"
+  },
+  {
+    "slug": "nginx",
+    "name": "NGINX",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#009639",
+    "guidelines": "https://www.nginx.com/press/"
+  },
+  {
+    "slug": "nodejs",
+    "name": "Node.js",
+    "source": "simple-icons@16.28.0#nodedotjs",
+    "license": "CC0-1.0",
+    "color": "#5FA04E",
+    "guidelines": "https://nodejs.org/en/about/branding"
+  },
+  {
+    "slug": "python",
+    "name": "Python",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#3776AB",
+    "guidelines": "https://www.python.org/community/logos/"
+  },
+  {
+    "slug": "go",
+    "name": "Go",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#00ADD8",
+    "guidelines": "https://blog.golang.org/go-brand"
+  },
+  {
+    "slug": "spring",
+    "name": "Spring",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#6DB33F"
+  },
+  {
+    "slug": "springboot",
+    "name": "Spring Boot",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#6DB33F"
+  },
+  {
+    "slug": "django",
+    "name": "Django",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#092E20"
+  },
+  {
+    "slug": "flask",
+    "name": "Flask",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#3BABC3"
+  },
+  {
+    "slug": "fastapi",
+    "name": "FastAPI",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#009688"
+  },
+  {
+    "slug": "graphql",
+    "name": "GraphQL",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#E10098",
+    "guidelines": "https://graphql.org/brand"
+  },
+  {
+    "slug": "github",
+    "name": "GitHub",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#181717",
+    "guidelines": "https://github.com/logos"
+  },
+  {
+    "slug": "gitlab",
+    "name": "GitLab",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#FC6D26",
+    "guidelines": "https://about.gitlab.com/handbook/marketing/corporate-marketing/brand-activation/trademark-guidelines/"
+  },
+  {
+    "slug": "prometheus",
+    "name": "Prometheus",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#E6522C"
+  },
+  {
+    "slug": "grafana",
+    "name": "Grafana",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#F46800"
+  },
+  {
+    "slug": "linux",
+    "name": "Linux",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#FCC624"
+  },
+  {
+    "slug": "ubuntu",
+    "name": "Ubuntu",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#E95420",
+    "guidelines": "https://design.ubuntu.com/brand"
+  },
+  {
+    "slug": "kong",
+    "name": "Kong",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#003459",
+    "guidelines": "https://konghq.com/brand/"
+  },
+  {
+    "slug": "istio",
+    "name": "Istio",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#466BB0"
+  },
+  {
+    "slug": "etcd",
+    "name": "etcd",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#419EDA"
+  },
+  {
+    "slug": "stripe",
+    "name": "Stripe",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#635BFF"
+  },
+  {
+    "slug": "paypal",
+    "name": "PayPal",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#002991",
+    "guidelines": "https://newsroom.paypal-corp.com/media-resources"
+  },
+  {
+    "slug": "wechat",
+    "name": "WeChat",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#07C160",
+    "guidelines": "https://wechat.design/brand/main-brand"
+  },
+  {
+    "slug": "alipay",
+    "name": "Alipay",
+    "source": "simple-icons@16.28.0",
+    "license": "CC0-1.0",
+    "color": "#1677FF",
+    "guidelines": "https://global.alipay.com/docs/ac/website_hk/design"
+  },
+  {
+    "slug": "user",
+    "name": "User",
+    "source": "lucide-static@1.28.0",
+    "license": "ISC"
+  },
+  {
+    "slug": "users",
+    "name": "Users",
+    "source": "lucide-static@1.28.0",
+    "license": "ISC"
+  },
+  {
+    "slug": "user-check",
+    "name": "User Check",
+    "source": "lucide-static@1.28.0",
+    "license": "ISC"
+  },
+  {
+    "slug": "file",
+    "name": "File",
+    "source": "lucide-static@1.28.0",
+    "license": "ISC"
+  },
+  {
+    "slug": "file-text",
+    "name": "File Text",
+    "source": "lucide-static@1.28.0",
+    "license": "ISC"
+  },
+  {
+    "slug": "folder",
+    "name": "Folder",
+    "source": "lucide-static@1.28.0",
+    "license": "ISC"
+  },
+  {
+    "slug": "database",
+    "name": "Database",
+    "source": "lucide-static@1.28.0",
+    "license": "ISC"
+  },
+  {
+    "slug": "table",
+    "name": "Table",
+    "source": "lucide-static@1.28.0",
+    "license": "ISC"
+  },
+  {
+    "slug": "arrow-right",
+    "name": "Arrow Right",
+    "source": "lucide-static@1.28.0",
+    "license": "ISC"
+  },
+  {
+    "slug": "check",
+    "name": "Check",
+    "source": "lucide-static@1.28.0",
+    "license": "ISC"
+  },
+  {
+    "slug": "x",
+    "name": "X",
+    "source": "lucide-static@1.28.0",
+    "license": "ISC"
+  },
+  {
+    "slug": "alert-circle",
+    "name": "Alert Circle",
+    "source": "lucide-static@1.28.0",
+    "license": "ISC"
+  },
+  {
+    "slug": "workflow",
+    "name": "Workflow",
+    "source": "lucide-static@1.28.0",
+    "license": "ISC"
+  },
+  {
+    "slug": "git-branch",
+    "name": "Git Branch",
+    "source": "lucide-static@1.28.0",
+    "license": "ISC"
+  },
+  {
+    "slug": "shopping-cart",
+    "name": "Shopping Cart",
+    "source": "lucide-static@1.28.0",
+    "license": "ISC"
+  },
+  {
+    "slug": "credit-card",
+    "name": "Credit Card",
+    "source": "lucide-static@1.28.0",
+    "license": "ISC"
+  },
+  {
+    "slug": "package",
+    "name": "Package",
+    "source": "lucide-static@1.28.0",
+    "license": "ISC"
+  },
+  {
+    "slug": "truck",
+    "name": "Truck",
+    "source": "lucide-static@1.28.0",
+    "license": "ISC"
+  },
+  {
+    "slug": "mail",
+    "name": "Mail",
+    "source": "lucide-static@1.28.0",
+    "license": "ISC"
+  },
+  {
+    "slug": "message-square",
+    "name": "Message Square",
+    "source": "lucide-static@1.28.0",
+    "license": "ISC"
+  },
+  {
+    "slug": "bell",
+    "name": "Bell",
+    "source": "lucide-static@1.28.0",
+    "license": "ISC"
+  },
+  {
+    "slug": "phone",
+    "name": "Phone",
+    "source": "lucide-static@1.28.0",
+    "license": "ISC"
+  },
+  {
+    "slug": "send",
+    "name": "Send",
+    "source": "lucide-static@1.28.0",
+    "license": "ISC"
+  },
+  {
+    "slug": "settings",
+    "name": "Settings",
+    "source": "lucide-static@1.28.0",
+    "license": "ISC"
+  },
+  {
+    "slug": "server",
+    "name": "Server",
+    "source": "lucide-static@1.28.0",
+    "license": "ISC"
+  },
+  {
+    "slug": "cloud",
+    "name": "Cloud",
+    "source": "lucide-static@1.28.0",
+    "license": "ISC"
+  },
+  {
+    "slug": "lock",
+    "name": "Lock",
+    "source": "lucide-static@1.28.0",
+    "license": "ISC"
+  },
+  {
+    "slug": "shield",
+    "name": "Shield",
+    "source": "lucide-static@1.28.0",
+    "license": "ISC"
+  },
+  {
+    "slug": "search",
+    "name": "Search",
+    "source": "lucide-static@1.28.0",
+    "license": "ISC"
+  },
+  {
+    "slug": "globe",
+    "name": "Globe",
+    "source": "lucide-static@1.28.0",
+    "license": "ISC"
+  },
+  {
+    "slug": "clock",
+    "name": "Clock",
+    "source": "lucide-static@1.28.0",
+    "license": "ISC"
+  },
+  {
+    "slug": "calendar",
+    "name": "Calendar",
+    "source": "lucide-static@1.28.0",
+    "license": "ISC"
+  },
+  {
+    "slug": "cpu",
+    "name": "Cpu",
+    "source": "lucide-static@1.28.0",
+    "license": "ISC"
+  },
+  {
+    "slug": "zap",
+    "name": "Zap",
+    "source": "lucide-static@1.28.0",
+    "license": "ISC"
+  },
+  {
+    "slug": "bar-chart-3",
+    "name": "Bar Chart 3",
+    "source": "lucide-static@1.28.0",
+    "license": "ISC"
+  },
+  {
+    "slug": "monitor",
+    "name": "Monitor",
+    "source": "lucide-static@1.28.0",
+    "license": "ISC"
+  },
+  {
+    "slug": "smartphone",
+    "name": "Smartphone",
+    "source": "lucide-static@1.28.0",
+    "license": "ISC"
+  },
+  {
+    "slug": "home",
+    "name": "Home",
+    "source": "lucide-static@1.28.0",
+    "license": "ISC"
+  }
+]

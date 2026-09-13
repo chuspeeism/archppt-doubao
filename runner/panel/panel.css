@@ -1,0 +1,234 @@
+/* ═══════════════════════════════════════════════════════════════
+   架构图绘制步骤面板 —— 样式
+   视觉源自 Nocturne 设计系统，取值与设计稿 design/step-panel/panel-design.html
+   的 :root 逐条对齐（见同目录设计稿 README 的 token 表）。改这里两个版式同步。
+
+   两种版式：默认 960×540（wide）；竖长 640×1080（tall）。
+   面板本身铺满窗口 —— 把窗口设成基准尺寸时与设计稿逐像素一致，
+   --panel-w / --panel-h 记录的就是这个基准尺寸。
+   ═══════════════════════════════════════════════════════════════ */
+:root{
+  /* ── 1. 底色与层次 ───────────────────────────────────────── */
+  --stage:#0C0D14;              /* 演示台底色（录屏时不会出现） */
+  --panel-bg:#161826;           /* 面板底色 */
+  --panel-bg-top:#1C1F30;       /* 面板渐变的亮端 */
+  --hairline:rgba(233,233,237,.11);
+  --panel-edge:rgba(233,233,237,.07);
+  --track:rgba(233,233,237,.08);
+
+  /* ── 2. 文字色 ───────────────────────────────────────────── */
+  --ink:#E9E9ED;                /* 主文字 */
+  --ink-2:#AEB2C4;              /* 次级文字 */
+  --ink-3:#7A7F94;              /* 标签、时间、脚注 */
+
+  /* ── 3. 主色（进行中与完成）与语义色 ─────────────────────── */
+  --primary:#4A86F7;            /* 进度数字、进度条、指示灯 */
+  --primary-deep:#2F6FED;       /* 进度条渐变的深端 */
+  --primary-glow:rgba(74,134,247,.42);
+  --primary-soft:rgba(74,134,247,.13);
+  --primary-ink:#E8F0FF;        /* 主色底上的文字 */
+  --success:#3ECF8E;            /* 完成、打勾 */
+  --danger:#F2606E;             /* 错误 */
+  --danger-soft:rgba(242,96,110,.10);
+  --danger-ink:#FFE6E9;
+
+  /* ── 4. 图元类型色标（只用于小色条与色点） ───────────────── */
+  --type-container:#A48CF0;
+  --type-node:#E0A455;
+  --type-edge:#57BEDC;
+  --type-label:#D9739A;
+  /* 契约里的 kind 有六个，设计稿只给了四个色。标题/副标题是文字不是图元，
+     走中性灰，不进底部四类计数。 */
+  --type-text:#AEB2C4;
+
+  /* ── 5. 字体与字号（仅系统无衬线栈，无网络字体） ─────────── */
+  --font-ui:"PingFang SC","SF Pro Text",-apple-system,BlinkMacSystemFont,system-ui,"Helvetica Neue","Microsoft YaHei",sans-serif;
+  --font-num:"SF Mono",SFMono-Regular,ui-monospace,Menlo,monospace;
+  --fs-hero:54px;               /* 状态大字：等待 / 已保存 */
+  --fs-title:40px;              /* 架构图标题、错误标题 */
+  --fs-current:44px;            /* 当前步骤大字 */
+  --fs-progress:46px;           /* 进度数字 */
+  --fs-row:21px;                /* 已完成列表行 */
+  --fs-body:20px;               /* 正文 */
+  --fs-kicker:18px;             /* 最小字号：标签与脚注 */
+
+  /* ── 6. 尺寸与间距（主版本 960×540） ─────────────────────── */
+  --panel-w:960px;
+  --panel-h:540px;
+  --pad:40px;                   /* 面板内边距 */
+  --gap:26px;                   /* 主要区块间距 */
+  --row-h:44px;                 /* 已完成列表行高 */
+  --chip-h:52px;                /* 当前步骤色标高度 */
+  --bar-h:7px;                  /* 进度条高度 */
+  --radius:8px;
+  --log-max:206px;              /* 已完成列表可见高度 */
+
+  /* ── 7. 动效（时长与曲线） ───────────────────────────────── */
+  --dur-bar:.45s;               /* 进度条推进 */
+  --dur-row:.34s;               /* 完成行滑入 */
+  --dur-pop:.42s;               /* 完成态整块弹入 */
+  --dur-check:.5s;              /* 勾线绘制 */
+  --cycle-breathe:1.6s;         /* 当前步骤呼吸 */
+  --cycle-cta:2.4s;             /* 「开始绘制」呼吸 */
+  --cycle-dot:1.9s;             /* 顶部状态灯 */
+  --cycle-pulse:2.6s;           /* 等待态脉动 */
+  --cycle-sweep:2.2s;           /* 进度条流光 */
+  --ease-out:cubic-bezier(.2,.8,.2,1);
+  --ease-bar:cubic-bezier(.22,.75,.2,1);
+}
+
+/* 竖长版本 640×1080 —— 同一套标记，只换这 12 个变量 */
+[data-panel="tall"]{
+  --panel-w:640px;
+  --panel-h:1080px;
+  --pad:46px;
+  --gap:34px;
+  --row-h:52px;
+  --chip-h:58px;
+  --fs-hero:56px;
+  --fs-title:38px;
+  --fs-current:42px;
+  --fs-progress:52px;
+  --fs-row:22px;
+  --fs-body:21px;
+  --log-max:672px;
+}
+
+/* 状态色：面板整体的语义色（顶部线、光晕、状态灯） */
+[data-state]{--state:var(--primary)}
+[data-state="done"]{--state:var(--success)}
+[data-state="error"]{--state:var(--danger)}
+
+/* 图元类型色：就近取用 var(--tc) */
+[data-type]{--tc:var(--type-text)}
+[data-type="container"]{--tc:var(--type-container)}
+[data-type="node"]{--tc:var(--type-node)}
+[data-type="edge"]{--tc:var(--type-edge)}
+[data-type="label"]{--tc:var(--type-label)}
+/* 授权确认不是图元，走主色蓝 —— 面板上「正在确认 PowerPoint 授权」那一块 */
+[data-type="auth"]{--tc:var(--primary)}
+
+/* ── 基础 ─────────────────────────────────────────────────── */
+*{box-sizing:border-box;margin:0}
+html,body{height:100%;background:var(--stage);overflow:hidden}
+body{font-family:var(--font-ui);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+[hidden]{display:none!important}
+::selection{background:var(--primary-soft)}
+
+/* ── 面板本体 ─────────────────────────────────────────────── */
+.panel{position:fixed;inset:0;display:flex;flex-direction:column;overflow:hidden;color:var(--ink);font-family:var(--font-ui);background:linear-gradient(163deg,var(--panel-bg-top),var(--panel-bg) 58%)}
+.panel-line{position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--state) 16%,var(--state) 84%,transparent)}
+.panel-glow{position:absolute;top:-180px;left:-120px;width:640px;height:360px;pointer-events:none;background:radial-gradient(circle at 32% 45%,color-mix(in oklab,var(--state) 20%,transparent),transparent 68%)}
+
+.panel-head{position:relative;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:var(--pad) var(--pad) 0}
+.head-state{display:flex;align-items:center;gap:11px}
+.state-dot{width:9px;height:9px;border-radius:50%;background:var(--state);box-shadow:0 0 14px var(--state);animation:dot-blink var(--cycle-dot) ease-in-out infinite}
+.state-name{font-size:var(--fs-kicker);letter-spacing:.13em;color:var(--ink-2)}
+.head-clock{display:flex;align-items:baseline;gap:7px}
+.clock-label{font-size:var(--fs-kicker);letter-spacing:.1em;color:var(--ink-3)}
+.clock-num{font-size:28px;font-weight:500;font-variant-numeric:tabular-nums;color:var(--ink)}
+.clock-unit{font-size:var(--fs-kicker);color:var(--ink-3)}
+
+.body{position:relative;flex:1;display:flex;flex-direction:column;padding:0 var(--pad)}
+.body--idle{justify-content:center;gap:20px}
+.body--ready{justify-content:center;gap:var(--gap)}
+.body--draw{min-height:0}
+.body--done{justify-content:center;gap:22px}
+.body--error{justify-content:center;gap:20px}
+
+/* 1 · 等待 */
+.pulse{position:relative;width:16px;height:16px;margin-bottom:6px}
+.pulse-core{position:absolute;inset:0;border-radius:50%;background:var(--primary);box-shadow:0 0 18px var(--primary-glow);animation:dot-blink var(--cycle-pulse) ease-in-out infinite}
+.pulse-ring{position:absolute;inset:0;border-radius:50%;border:1.5px solid var(--primary);animation:ring-out var(--cycle-pulse) cubic-bezier(.2,.6,.3,1) infinite}
+.pulse-ring--late{animation-delay:1.3s}
+.hero{font-size:var(--fs-hero);font-weight:500;letter-spacing:-.01em;line-height:1.12}
+.sub{font-size:var(--fs-body);color:var(--ink-2);line-height:1.5;max-width:24em}
+
+/* 2 · 已收到 */
+.eyebrow{font-size:var(--fs-kicker);letter-spacing:.1em;color:var(--primary);margin-bottom:12px}
+.title{font-size:var(--fs-title);font-weight:500;letter-spacing:-.01em;line-height:1.15}
+.counts{display:flex;align-items:stretch;gap:34px}
+.count{display:flex;align-items:baseline;gap:10px}
+.count-mark{width:4px;align-self:stretch;border-radius:2px;background:var(--tc)}
+.count-num{font-size:34px;font-weight:500;font-variant-numeric:tabular-nums}
+.count-label{font-size:var(--fs-body);color:var(--ink-2)}
+.cta{display:inline-flex;align-self:flex-start;align-items:center;gap:14px;padding:16px 26px;border-radius:var(--radius);border:1px solid var(--primary);background:var(--primary-soft);animation:breathe var(--cycle-cta) ease-in-out infinite}
+.cta-glyph{width:0;height:0;border-left:13px solid var(--primary);border-top:8px solid transparent;border-bottom:8px solid transparent}
+.cta-text{font-size:24px;font-weight:500;color:var(--primary-ink);letter-spacing:.02em;line-height:1.4;white-space:nowrap;flex:0 0 auto}
+
+/* 3 · 绘制中 */
+.prog-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-top:24px}
+.prog-nums{display:flex;align-items:baseline;font-variant-numeric:tabular-nums;line-height:1}
+.prog-now{font-size:var(--fs-progress);font-weight:500;color:var(--primary)}
+/* 斜杠两侧的空格是 #progress 的文本形态（契约要求读出来是 `12 / 34`），
+   4px 内边距 + 一个空格宽 ≈ 设计稿的 10px 内边距 */
+.prog-slash{font-size:calc(var(--fs-progress) * .52);color:var(--ink-3);padding:0 4px;white-space:pre}
+.prog-total{font-size:calc(var(--fs-progress) * .58);color:var(--ink-2)}
+.prog-label{font-size:var(--fs-kicker);letter-spacing:.1em;color:var(--ink-3);padding-bottom:4px}
+.bar{position:relative;height:var(--bar-h);margin-top:16px;border-radius:99px;background:var(--track);overflow:hidden}
+.bar-fill{height:100%;border-radius:99px;background:linear-gradient(90deg,var(--primary-deep),var(--primary));box-shadow:0 0 18px var(--primary-glow);transition:width var(--dur-bar) var(--ease-bar)}
+.bar-sweep{position:absolute;top:0;bottom:0;left:0;width:28%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.35),transparent);animation:sweep var(--cycle-sweep) linear infinite}
+
+.current{display:flex;align-items:center;gap:20px;margin-top:var(--gap)}
+.current-mark{width:5px;height:var(--chip-h);border-radius:3px;background:var(--tc);box-shadow:0 0 16px var(--tc);animation:breathe var(--cycle-breathe) ease-in-out infinite}
+.current-text{min-width:0}
+.current-eyebrow{font-size:var(--fs-kicker);letter-spacing:.1em;color:var(--ink-3);margin-bottom:7px}
+.current-line{font-size:var(--fs-current);font-weight:500;letter-spacing:-.01em;line-height:1.34;padding-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.current-tag{color:var(--tc)}
+.current-sub{font-size:var(--fs-body);color:var(--ink-2);margin-top:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* 同 .prog-slash：间隔点两侧留真空格，#current 读出来就是「节点 · API 网关」 */
+.current-dot{color:var(--ink-3);padding:0 .05em;white-space:pre}
+
+.logwrap{margin-top:auto;padding-top:var(--gap);display:flex;flex-direction:column;min-height:0;flex:0 1 auto}
+.rule{height:1px;flex:0 0 auto;background:linear-gradient(90deg,transparent,var(--hairline) 48px,var(--hairline) calc(100% - 48px),transparent)}
+.log{flex:0 1 auto;min-height:0;max-height:var(--log-max);display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden;padding-bottom:6px;-webkit-mask-image:linear-gradient(to bottom,transparent,#000 60px);mask-image:linear-gradient(to bottom,transparent,#000 60px)}
+.log-row{flex:0 0 auto;display:flex;align-items:center;gap:13px;height:var(--row-h)}
+.log-row[data-in="a"]{animation:row-in-a var(--dur-row) var(--ease-out) both}
+.log-row[data-in="b"]{animation:row-in-b var(--dur-row) var(--ease-out) both}
+.log-check{width:20px;font-size:20px;line-height:1;color:var(--success)}
+.log-mark{width:4px;height:19px;border-radius:2px;background:var(--tc)}
+.log-tag{font-size:var(--fs-row);color:var(--tc)}
+.log-dot{font-size:var(--fs-row);color:var(--ink-3)}
+.log-name{flex:1;min-width:0;font-size:var(--fs-row);color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.log-dur{font-family:var(--font-num);font-size:calc(var(--fs-row) * .9);font-variant-numeric:tabular-nums;color:var(--ink-3)}
+
+/* 4 · 完成 */
+.done-head{display:flex;align-items:center;gap:22px;animation:pop var(--dur-pop) var(--ease-out) both}
+.done-check path{stroke-dasharray:44;animation:draw var(--dur-check) .18s cubic-bezier(.3,.8,.3,1) both}
+.done-body{display:flex;flex-direction:column;gap:22px}
+.done-body:empty{display:none}
+.done-file{font-family:var(--font-num);font-size:26px;color:var(--ink);letter-spacing:.01em;word-break:break-all}
+.done-path{font-size:var(--fs-kicker);color:var(--ink-3);margin-top:9px;word-break:break-all}
+.done-stats{display:flex;gap:40px;flex-wrap:wrap}
+.done-stat{display:flex;align-items:baseline;gap:9px}
+.done-num{font-size:32px;font-weight:500;font-variant-numeric:tabular-nums;color:var(--success)}
+.done-label{font-size:var(--fs-body);color:var(--ink-2)}
+.done-note{font-size:var(--fs-kicker);color:var(--ink-3)}
+
+/* 5 · 错误 */
+.err-head{display:flex;align-items:center;gap:18px}
+.err-badge{display:flex;align-items:center;justify-content:center;width:42px;height:42px;border-radius:50%;border:2px solid var(--danger);color:var(--danger);font-size:26px;font-weight:500;line-height:1}
+.err-title{font-size:var(--fs-title);font-weight:500;color:var(--danger);letter-spacing:-.01em;line-height:1.1}
+.err-msg{font-size:var(--fs-body);color:var(--ink-2);line-height:1.5;max-width:28em}
+.err-note{font-size:var(--fs-kicker);color:var(--ink-3)}
+.err-note:empty{display:none}
+.err-cta{display:inline-flex;align-self:flex-start;align-items:center;gap:12px;margin-top:4px;padding:14px 24px;border-radius:var(--radius);border:1px solid var(--danger);background:var(--danger-soft)}
+.err-cta-text{font-size:22px;font-weight:500;color:var(--danger-ink);line-height:1.4;white-space:nowrap;flex:0 0 auto}
+.err-cta-note{font-size:var(--fs-kicker);color:rgba(255,230,233,.6);white-space:nowrap}
+
+/* ── 图元类型图例（底部四类计数） ─────────────────────────── */
+.legend{position:relative;display:flex;align-items:center;gap:18px 26px;flex-wrap:wrap;padding:18px var(--pad) var(--pad)}
+.legend-item{display:flex;align-items:center;gap:9px}
+.legend-mark{width:9px;height:9px;border-radius:2px;background:var(--tc)}
+.legend-label{font-size:var(--fs-kicker);color:var(--ink-2)}
+.legend-count{font-size:var(--fs-kicker);font-variant-numeric:tabular-nums;color:var(--ink-3)}
+
+/* ── 动效关键帧 ───────────────────────────────────────────── */
+@keyframes breathe{0%,100%{opacity:.5;transform:scale(.97)}50%{opacity:1;transform:scale(1)}}
+@keyframes dot-blink{0%,100%{opacity:.45}50%{opacity:1}}
+@keyframes ring-out{0%{transform:scale(.6);opacity:.55}80%,100%{transform:scale(2.9);opacity:0}}
+@keyframes row-in-a{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes row-in-b{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes pop{from{opacity:0;transform:scale(.82)}to{opacity:1;transform:none}}
+@keyframes draw{from{stroke-dashoffset:44}to{stroke-dashoffset:0}}
+@keyframes sweep{0%{transform:translateX(-100%)}100%{transform:translateX(340%)}}
