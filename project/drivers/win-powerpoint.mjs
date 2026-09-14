@@ -27,7 +27,9 @@
 //   6. **字体名要再过一层替身（WIN_FONT_SUB）。** draw-steps 挂在 op 上的族名是按 macOS
 //      算的（Helvetica Neue / 苹方 / Menlo），Windows 上一个都没装；点名一个装不了的族，
 //      PowerPoint 不报错、静默回退到主题字体（等线 / Calibri）。mac 驱动器直接写原名，
-//      这里必须先查表。**这张表没在真 Windows 上验证过**，见 WIN_FONT_SUB 的注释。
+//      这里必须先查表。西文落 Arial，**中文一律落等线**（孙毅 2026-09-13 拍板：等线随
+//      Office 2016+ 一起装、又是中文 Office 的主题字体，一次跑通优先）。
+//      **这张表没在真 Windows 上验证过**，见 WIN_FONT_SUB 的注释。
 //
 // ── 其余照抄 mac 的设计 ──────────────────────────────────────────────────────
 //
@@ -271,15 +273,22 @@ const roundAdj = (radius, w, h) => {
  * PowerPoint 不报错，静默回退到主题字体（等线 / Calibri），中文西文都跟页面对不上 ——
  * 跟一句字体都不设的结果一样。所以在 Windows 这一侧再过一层替身。
  *
- * 选谁的依据（都只是**推断**，见下面的免责）：
+ * 选谁的依据：
  *   * Helvetica Neue → Arial —— docs/pptx-font-substitution.md 在真 PowerPoint 上扫过
  *     一轮西文候选，Arial 是第二名（文字 ink 95.95%，第一名 Helvetica Neue 96.09%），
  *     差 0.14 个点；而 Arial 是 Windows 必装的。
- *   * 苹方简 → 微软雅黑、苹方繁/港 → 微软正黑 —— 同为无衬线黑体、同为系统默认中文族。
- *   * Songti SC → 宋体（SimSun）—— academic 皮肤走这条，两边都是中文衬线。
+ *   * **中日韩族（苹方简 / 繁 / 港、Hiragino Sans GB、宋体族、黑体族）一律 → 等线。**
+ *     孙毅 2026-09-13 拍板。理由是**一次跑通优先**：等线随 Office 2016+ 一起装，中文 Office
+ *     的主题字体本来就是它，所以「用户机器上一定有、装完 Office 就有」这件事不用赌；
+ *     观感也与 Office 自己的默认一致，用户在 PowerPoint 里接着编辑不会看到字体跳变。
+ *     **这不是降级**，是按 Office 的默认口径落地。代价是中文这一侧点名的族名与主题字体同名
+ *     （等于把主题默认显式写死一次），西文那一侧仍然点名 Arial —— 主题西文默认是 Calibri，
+ *     不是 Arial，这一句是真的在改东西。用中文名「等线」不用 `DengXian`：中文 Office 自己
+ *     在 docProps 里记的就是「等线」。
  *   * Menlo / SF Mono / Monaco → Consolas —— 三者都是等宽，Consolas 是 Windows 自带的那个。
  *   * 表里没有的**原样透传**：Arial / Georgia / Times New Roman / 微软雅黑 / 宋体 /
  *     Consolas 这些 Windows 自带的族，以及用户自定义皮肤写的任何族名，都不该被改。
+ *     用户自定义皮肤明写微软雅黑或宋体时，那是他自己点的名，照旧透传。
  *
  * ⚠️ **这张表没有在 Windows 上验证过。** 本仓的保真台（scripts/pptx-fidelity.mjs）只跑
  * macOS + PowerPoint for Mac，Arial 那 95.95% 也是在 macOS 上量的。真机验收清单见
@@ -287,13 +296,13 @@ const roundAdj = (radius, w, h) => {
  */
 export const WIN_FONT_SUB = Object.freeze({
   'helvetica neue': 'Arial',
-  'pingfang sc': 'Microsoft YaHei',
-  'pingfang tc': 'Microsoft JhengHei',
-  'pingfang hk': 'Microsoft JhengHei',
-  'hiragino sans gb': 'Microsoft YaHei',
-  'songti sc': 'SimSun',
-  'heiti sc': 'Microsoft YaHei',
-  stheiti: 'Microsoft YaHei',
+  'pingfang sc': '等线',
+  'pingfang tc': '等线',
+  'pingfang hk': '等线',
+  'hiragino sans gb': '等线',
+  'songti sc': '等线',
+  'heiti sc': '等线',
+  stheiti: '等线',
   menlo: 'Consolas',
   'sf mono': 'Consolas',
   monaco: 'Consolas',

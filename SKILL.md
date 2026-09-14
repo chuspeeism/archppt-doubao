@@ -91,9 +91,13 @@ node "<技能目录>/runner/run.mjs" "<第 3 步写的 spec 绝对路径>" --del
 node "<技能目录>\runner\run.mjs" "<第 3 步写的 spec 绝对路径>" --delay 350
 ```
 
-**Windows 上先跑一句 `node -v` 确认有 Node。** 没有的话就告诉用户「这个技能需要 Node.js 18
-或更高版本，请到 nodejs.org 下载 LTS 版安装后重启豆包工作」，然后停下——
-**不要自己去下载安装 Node**，也不要用 `Start-Process -Verb RunAs` 之类的提权命令。
+**两个平台都先跑一句 `node -v` 确认本机有 Node**（macOS 在终端里跑，Windows 在 PowerShell 里跑，
+同一条命令）。没有的话两边说同一句话：「这个技能需要 Node.js 18 或更高版本，请到 nodejs.org
+下载 LTS 版安装后重启豆包工作」，然后**停下等用户装好**，不要接着往下跑。
+
+**不要自己去下载安装 Node**——macOS 上也不要 `brew install node`，Windows 上不要
+`winget install` / `choco install`，两个平台都不要用 `sudo` / `Start-Process -Verb RunAs`
+之类的提权命令。装运行时是用户自己的决定，技能只负责告诉他缺什么、去哪儿装。
 
 通常 **30–60 秒**（画完之后面板上的完成态还会亮 20 秒才返回，这段也算在内）；
 PowerPoint 冷启动的那一次再多 20 秒左右。中途不要打断，也不要重复执行。
