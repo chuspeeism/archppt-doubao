@@ -16,6 +16,7 @@
 // 用法：
 //   node run.mjs <spec.json> [<spec2.json> …] [--delay 350] [--out <pptx>] [--port 7431]
 //                            [--no-open] [--keep-panel 20] [--dry-run]
+//                            [--skin <id>] [--window left,top,width,height]
 //
 // **一份 PPT 可以有多套架构图**（deck）。两种写法：
 //   ① 一份 deck 文件：`{ "title": "整套的名字", "slides": [ 单图 spec, 单图 spec ] }`
@@ -31,6 +32,8 @@
 // | `--keep-panel <秒>` | 20 | 画完之后面板再留多久（让完成态停一会儿）。失败时不等 |
 // | `--dry-run` | 关 | 只走校验 + 布局 + 指令流，不起面板、不碰 PowerPoint |
 // | `--events <jsonl>` | `<本目录>/.state/steps.jsonl` | 事件流落盘位置 |
+// | `--skin <id>` | 不给 | **覆盖每一页**的皮肤，用来「同一份 JSON 换个皮肤再画一遍」。id 不在 14 套里 = 退出码 2 |
+// | `--window <l,t,w,h>` | 不给 | 把 PowerPoint 窗口摆到这个矩形（屏幕点、原点左上）。**只在 macOS 生效**，演示模式用 |
 // | `--no-activate` / `--no-animation` / `--keep-script` | 关 | 同 draw.mjs |
 //
 // 退出码 0 = 成功，stdout 最后一行 `已保存：<绝对路径>`（`--dry-run` 是 `DRY-OK steps=n shapes=m`，
@@ -84,13 +87,20 @@ import {
   powerPointMissingMessage, missingPowerPointCode,
   powerShellMissingMessage, NO_POWERSHELL_CODE,
   checkOutPath, DRIVER_PLATFORM, probePowerPoint as driverProbePowerPoint,
+  applySkin, parseWindowBounds, WINDOW_ARG_ERROR,
 } from './draw.mjs';
 import { createPanelServer } from './panel/server.mjs';
 
 const USAGE = `用法: node run.mjs <spec.json> [<spec2.json> …] [--delay 350] [--out <pptx>]
                           [--port 7431] [--no-open] [--keep-panel 20] [--dry-run]
+                          [--skin <id>] [--window left,top,width,height]
 
 多个 spec = 一份多页 PPT（顺序按参数顺序）；一份顶层带 slides 数组的 deck 文件同理。
+
+--skin <id>          覆盖**每一页**的皮肤（不改 spec 文件），用来「同一份 JSON 换个皮肤再画一遍」。
+                     id 不在 14 套里 = 退出码 2，最后一行「失败：spec 校验失败：皮肤 … 不存在」。
+--window l,t,w,h     把 PowerPoint 窗口摆到这个矩形（屏幕点、原点左上）。**只在 macOS 生效**，
+                     演示模式用；摆不动只在面板上记一条 warn，绝不让绘制失败。
 
 成功: 退出码 0，最后一行「已保存：<pptx 绝对路径>」（多页时上一行还有「共 k 页」）
 失败: 退出码非 0，最后一行「失败：<原因>」（永远只有一行）
@@ -116,6 +126,8 @@ function parseArgs(argv) {
     activate: true,
     animate: true,
     keepScript: false,
+    skin: null,          // --skin：覆盖每一页的皮肤；null = 各页用自己 spec 里写的
+    window: null,        // --window：{left, top, width, height}；null = 不动窗口
     probeCmd: null,      // 仅测试用的隐藏参数，见 --probe-cmd 那一支
     help: false,
   };
@@ -136,6 +148,15 @@ function parseArgs(argv) {
       case '--no-activate': opts.activate = false; break;
       case '--no-animation': opts.animate = false; break;
       case '--keep-script': opts.keepScript = true; break;
+      case '--skin': opts.skin = take(); break;
+      // 写错了走「未知参数」那一路（退出码 1）：这是人当场敲的参数，敲错了他要的是
+      // 「你敲错了」，不是一张按默认几何画出来的图
+      case '--window': {
+        const bounds = parseWindowBounds(take());
+        if (!bounds) throw new Error(WINDOW_ARG_ERROR);
+        opts.window = bounds;
+        break;
+      }
       // 隐藏参数，只给测试用：把授权预检的探针换成任意一条 shell 命令（/bin/sh -c <它>），
       // 这样测「预检失败」不需要真去惹 PowerPoint。USAGE 里不列。
       case '--probe-cmd': opts.probeCmd = take(); break;
@@ -321,8 +342,11 @@ async function main() {
   // ── 干跑：校验 + 布局 + 指令流，不起面板、不碰 PowerPoint ──────────────
   // 出货冒烟走这条；它证明「包脱离开发仓、引擎根找得到、整条算路走得通」。
   if (opts.dryRun) {
-    const loaded = readAndValidateSpec(opts.specs);
-    if (!loaded.ok) { console.log(`失败：${loaded.message}`); return loaded.code; }
+    const validated = readAndValidateSpec(opts.specs);
+    if (!validated.ok) { console.log(`失败：${validated.message}`); return validated.code; }
+    // --skin 的判定在 --dry-run 下同样走一遍：皮肤敲错了不该等到真去驱动 PowerPoint 才发现
+    const loaded = applySkin(validated, opts.skin);
+    if (loaded.ok === false) { console.log(`失败：${loaded.message}`); return loaded.code; }
     let plan;
     try { plan = buildPlan(loaded); } catch (error) {
       console.log(`失败：算布局失败：${error.message}`); return 1;
@@ -419,8 +443,12 @@ async function main() {
   };
 
   // ── 2. 读 + 校验 + phase:received ──────────────────────────────────────
-  const loaded = readAndValidateSpec(opts.specs);
-  if (!loaded.ok) { await fail(loaded.message); return loaded.code; }
+  const validated = readAndValidateSpec(opts.specs);
+  if (!validated.ok) { await fail(validated.message); return validated.code; }
+  // --skin 套在校验之后、算布局之前。皮肤敲错了跟 spec 没过校验走同一个出口：
+  // 面板上一条 error 事件、stdout 一行「失败：…」、退出码 2
+  const loaded = applySkin(validated, opts.skin);
+  if (loaded.ok === false) { await fail(loaded.message); return loaded.code; }
   // 多页时节点 / 连线数是各页之和，标题取 deck 的 title（没写就取第一页的）
   say({
     type: 'phase', phase: 'received',
@@ -428,6 +456,8 @@ async function main() {
     nodes: loaded.slides.reduce((n, s) => n + countNodes(s.nodes), 0),
     edges: loaded.slides.reduce((n, s) => n + (Array.isArray(s.edges) ? s.edges.length : 0), 0),
     slides: loaded.slides.length,
+    // `--skin` 给的那个 id；没给就是 null（= 各页用自己 spec 里写的皮肤）
+    skin: opts.skin != null ? String(opts.skin) : null,
     specPath: opts.specs[0],
   });
   for (const w of loaded.warnings) say({ type: 'log', level: 'warn', message: w });

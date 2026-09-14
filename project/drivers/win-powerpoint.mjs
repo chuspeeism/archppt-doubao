@@ -790,7 +790,9 @@ export function probePowerPoint(options) {
  * `{ type:'phase', phase:'slide', slide, slides, title }`，`step` 事件上多 `slide` / `slides`。
  *
  * @param {Array<{steps: Array, background?: string, title?: string}>} slides
- * @param {object} options 同 deckToPowerShell，另加 keepScript（留下临时脚本便于排错）
+ * @param {object} options 同 deckToPowerShell，另加 keepScript（留下临时脚本便于排错）。
+ *                 `windowBounds`（演示模式摆窗口）在这边**一律忽略**，只记一条 info ——
+ *                 那是 macOS 驱动器的事，Windows 上不许因为多收了一个字段就报错。
  * @param {(event: object) => void} [onEvent]
  * @returns {Promise<{file: string|null, shapes: number|null, elapsedMs: number,
  *                    animation: boolean, script: string, slides: number}>}
@@ -803,6 +805,11 @@ export function runDrawDeck(slides, options, onEvent) {
   const script = deckToPowerShell(pages, opts);
 
   const emit = (e) => { if (typeof onEvent === 'function') onEvent(e); };
+  // `--window` 是 macOS 演示模式的参数。这边收到只说一声，不报错也不改任何行为 ——
+  // 同一份 run.mjs 两个平台都跑，多一个字段就抛异常等于「Windows 上不许用 --window」。
+  if (opts.windowBounds) {
+    emit({ type: 'log', level: 'info', message: 'Windows 上不摆窗口（--window 只在 macOS 生效），已忽略' });
+  }
   const tail = [];
   const pushTail = (line) => { tail.push(line); if (tail.length > 200) tail.shift(); };
 

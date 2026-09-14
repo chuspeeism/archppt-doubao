@@ -44,6 +44,8 @@ node run.mjs <spec.json> --delay 350
 | `--no-open` | 关 | 不自动打开浏览器 |
 | `--keep-panel <秒>` | 20 | 画完之后面板再留多久（让完成态停一会儿）；失败时不等 |
 | `--dry-run` | 关 | 只走校验 + 布局 + 指令流，**不起面板、不碰 PowerPoint**。出货冒烟用它 |
+| `--skin <id>` | 不给 | **覆盖每一页**的皮肤（不改 spec 文件），用来「同一份 JSON 换个皮肤再画一遍」。14 套皮肤全认；id 不在里面直接退出码 2，最后一行「失败：spec 校验失败：皮肤 … 不存在」 |
+| `--window <l,t,w,h>` | 不给 | 把 PowerPoint 窗口摆到这个矩形（屏幕点、原点左上，四个非负整数）。**只在 macOS 生效**，演示模式用；Windows 上只记一条 info 日志。摆不动只报一条 warn，绝不让绘制失败 |
 
 **输出契约**（调用方只看最后一行就够）：成功退出码 0，stdout 最后一行
 `已保存：<pptx 绝对路径>`；`--dry-run` 时是 `DRY-OK steps=<n> shapes=<n>`；
@@ -159,6 +161,8 @@ cd <技能目录>/runner && node draw.mjs 订单.json 支付.json --delay 400
 | `--no-activate` | 关 | 不把 PowerPoint 拉到前台（它照样在画，只是不抢焦点） |
 | `--no-animation` | 关 | 不加进入动画 |
 | `--keep-script` | 关 | 留下生成的 `.applescript` 临时文件，排错用 |
+| `--skin <id>` | 不给 | 同 `run.mjs`：覆盖每一页的皮肤 |
+| `--window <l,t,w,h>` | 不给 | 同 `run.mjs`：摆 PowerPoint 窗口，**只在 macOS 生效**，演示模式用 |
 
 退出码：`0` 成功 / `2` spec 校验没过、或 `--out` 落点不合法 / `3` PowerPoint 没应答
 （要点授权框）/ `5` 画起来之后 PowerPoint 中途无响应（前台压着对话框）/ `1` 其它。

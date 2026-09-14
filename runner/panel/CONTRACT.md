@@ -9,7 +9,7 @@
 
 ```jsonc
 {"ts":"<ISO>","type":"phase","phase":"waiting"}
-{"ts":"<ISO>","type":"phase","phase":"received","title":"AI Agent 产品架构","nodes":14,"edges":9,"slides":1,"specPath":"/abs/path"}
+{"ts":"<ISO>","type":"phase","phase":"received","title":"AI Agent 产品架构","nodes":14,"edges":9,"slides":1,"skin":null,"specPath":"/abs/path"}
 {"ts":"<ISO>","type":"phase","phase":"layout","total":27,"byKind":{"title":1,"subtitle":1,"container":3,"node":14,"edge":9,"label":1},"slides":1}
 {"ts":"<ISO>","type":"phase","phase":"auth","platform":"darwin"}
 {"ts":"<ISO>","type":"phase","phase":"slide","slide":2,"slides":3,"title":"数据链路"}
@@ -43,9 +43,12 @@
 中途可能直接跳到 `error`，那就没有后续 phase 了。
 
 - `waiting`：面板起来了，正在等剪贴板里出现架构图 JSON。
-- `received`：收到并且**校验通过**了一份 spec。带 `title` / `nodes` / `edges` / `slides` / `specPath`。
+- `received`：收到并且**校验通过**了一份 spec。带 `title` / `nodes` / `edges` / `slides` /
+  `skin` / `specPath`。
   多页时 `title` 是整套的名字（deck 没写就取第一页的标题），`nodes` / `edges` 是各页之和，
   `slides` 是页数（单页就是 1），`specPath` 是第一份 spec 的路径。
+  **`skin` 是命令行 `--skin` 给的那个皮肤 id**（它覆盖每一页），没给就是 `null` ——
+  `null` 不等于「没有皮肤」，是「各页用自己 spec 里写的那套」。
 - `layout`：引擎算完布局，`total` 是总步数 —— 进度条的分母从这里来。
   `byKind` 是**按 kind 分的步数**，面板底部「容器 0/3　节点 0/14　连线 0/9　标签 0/1」
   那一行的分母。只列**这一份图里真出现过的 kind**（没有容器的图就没有 `container` 这一项），

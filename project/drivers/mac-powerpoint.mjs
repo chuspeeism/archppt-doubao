@@ -353,6 +353,34 @@ const emitOp = (o, animate) => {
   return { lines, shapeRef: null };
 };
 
+/* ── 演示模式：把 PowerPoint 窗口摆到指定矩形 ──────────────────────────────
+ * 2026-09-13 在本机真 PowerPoint（16.x）上量的：`document window` 的四个几何属性
+ * （`left position` / `top` / `width` / `height`，全是 real）**写得动，回读逐个对得上** ——
+ * 新建一份演示文稿，`set pWin to document window 1` 拿到的就是它自己的窗口
+ * （实测：另开一份演示文稿在前，`document window 1` 仍是刚 make 出来的那一份），
+ * 从 {294, 30, 1600, 900} 设到 {1280, 30, 1280, 992}，回读一字不差。
+ *
+ * 两条实测出来的注意事项：
+ *   - `top` 小于菜单栏高度会被 macOS 夹到 30（设 25 回读是 30）。这不是失败，别当错处理。
+ *   - `document window 1 of pPres` 这种写法 PowerPoint **不按容器解析**，给的还是全局
+ *     document window 1。所以不如直接写 `document window 1`，别让人误以为它锁定了某一份。
+ *
+ * 整段包在 try 里，失败只发一条 `@@WINDOW fail`：**摆窗口是锦上添花，绝不能让绘制失败**
+ * （跟 `@@ANIM fail` / `@@BG fail` 一个待遇）。
+ */
+
+/**
+ * 归一 `options.windowBounds`。任何一个分量不是有限数、或宽高 ≤ 0 就整段不生成 ——
+ * 一个 NaN 坐标会让 PowerPoint 放弃渲染它之后的所有形状（见 CLAUDE.md 硬约束 4）。
+ */
+const windowBoundsOf = (wb) => {
+  if (!wb || typeof wb !== 'object') return null;
+  const v = ['left', 'top', 'width', 'height'].map((k) => Number(wb[k]));
+  if (v.some((n) => !Number.isFinite(n))) return null;
+  if (!(v[2] > 0) || !(v[3] > 0)) return null;
+  return { left: v[0], top: v[1], width: v[2], height: v[3] };
+};
+
 /**
  * 把 deck 的每一页归一成 `{ steps, background, title }`。空数组当一页空页处理，
  * 免得下面到处判 length。
@@ -382,11 +410,13 @@ const normalizeSlides = (slides) => {
  *   `@@STEP <i> start` / `@@STEP <i> done`（i 是全 deck 的连续编号）
  *   `@@SHAPES <n>`（**每页一条**，调用方累加）
  *   `@@PHASE saving` / `@@PHASE done <绝对路径>`
- *   `@@ANIM fail …` / `@@BG fail …`（尽力而为的两项失败时各报一次）
+ *   `@@ANIM fail …` / `@@BG fail …` / `@@WINDOW fail …`（尽力而为的三项失败时各报一次）
  *
  * @param {Array<{steps: Array, background?: string|null, title?: string|null}>} slides 每项一页
  * @param {object} [options] delayMs 每步之后停多久（演示 400，出片 0）；outPath 另存路径；
- *                           activate 是否把 PowerPoint 拉到前台；animate 是否加进入动画
+ *                           activate 是否把 PowerPoint 拉到前台；animate 是否加进入动画；
+ *                           windowBounds `{left, top, width, height}`（屏幕点、原点左上）
+ *                           = 把新建演示文稿的窗口摆到这里，**不给就一句窗口语句都不生成**
  */
 export function deckToAppleScript(slides, options) {
   const opts = options || {};
@@ -431,6 +461,20 @@ export function deckToAppleScript(slides, options) {
   out.push('\t\t\t\tset layout of pSld to slide layout blank');
   out.push('\t\t\tend if');
   out.push('\t\tend timeout');
+  // 演示模式：把刚建出来的这份演示文稿的窗口摆到位。不给 windowBounds 时**一句都不写**，
+  // 生成的脚本与加这个功能之前逐字节相同。
+  const wb = windowBoundsOf(opts.windowBounds);
+  if (wb) {
+    out.push('\t\ttry');
+    out.push('\t\t\tset pWin to document window 1');
+    out.push(`\t\t\tset left position of pWin to ${num(wb.left)}`);
+    out.push(`\t\t\tset top of pWin to ${num(wb.top)}`);
+    out.push(`\t\t\tset width of pWin to ${num(wb.width)}`);
+    out.push(`\t\t\tset height of pWin to ${num(wb.height)}`);
+    out.push('\t\ton error pErr number pNum');
+    out.push('\t\t\tmy emit("@@WINDOW fail " & pErr & " (" & pNum & ")")');
+    out.push('\t\tend try');
+  }
   // 底色能设就设，设不了只记一笔，不让整次绘制失败。每页各设各的。
   const pushBackground = (hex) => {
     const bg = rgb(hex);
@@ -618,6 +662,9 @@ export function runDrawDeck(slides, options, onEvent) {
       }
       m = line.match(/@@BG\s+fail\s*(.*)$/);
       if (m) { emit({ type: 'log', level: 'warn', message: `幻灯片底色设不了：${m[1].trim()}` }); return; }
+      // 摆窗口是锦上添花：摆不动只报一声，图照画、退出码照旧
+      m = line.match(/@@WINDOW\s+fail\s*(.*)$/);
+      if (m) { emit({ type: 'log', level: 'warn', message: `PowerPoint 窗口没摆到位：${m[1].trim()}` }); return; }
       if (line.indexOf('@@PHASE ready') >= 0) {
         emit({ type: 'log', level: 'info', message: 'PowerPoint 已就绪，空白版式第 1 页建好' });
       }

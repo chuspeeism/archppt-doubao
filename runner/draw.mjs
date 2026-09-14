@@ -28,13 +28,15 @@
 //
 // 用法：
 //   node draw.mjs <spec.json> [<spec2.json> …] [--delay 400] [--out <pptx>]
-//                             [--events <steps.jsonl>]
+//                             [--events <steps.jsonl>] [--skin <id>] [--window l,t,w,h]
 //                             [--no-activate] [--no-animation] [--append] [--keep-script]
 //
 // 默认值：
 //   --delay    400（每步之后停 400ms，给人看；出片设 0）
 //   --out      ~/Desktop/架构图-YYYYMMDD-HHmmss.pptx（同名自动加 -2 / -3）
 //   --events   <本目录>/.state/steps.jsonl
+//   --skin     不给就各页用自己 spec 里写的 skin；给了就**覆盖每一页**（见 applySkin）
+//   --window   不给就不动窗口；给了就把新建的演示文稿窗口摆到这个矩形（**只在 macOS 生效**）
 //
 // 退出码：0 成功 / 2 spec 校验失败或 --out 落点不合法 / 3 PowerPoint 没响应（授权框没处理掉）
 //         5 画起来之后 PowerPoint 中途无响应（前台压着对话框）/ 1 其它
@@ -108,6 +110,8 @@ const IS_WIN = DRIVER_PLATFORM === 'win32';
 
 const { validateSpec } = await importEngine('project/lib/spec-validator.mjs');
 const { sceneFromSpec, themeFor } = await importEngine('project/lib/scene-from-spec.mjs');
+/** 14 套皮肤的全集。`--skin` 只认这里面的 key（不只是新版四款）。 */
+const { SKINS } = await importEngine('project/lib/skins.mjs');
 const { sceneToDrawSteps, drawStepsSummary } = await importEngine('project/lib/exporters/draw-steps.mjs');
 export const DRIVER_PATH = IS_WIN
   ? 'project/drivers/win-powerpoint.mjs'
@@ -146,10 +150,14 @@ export const NO_POWERSHELL_CODE = IS_WIN ? driver.WIN_NO_POWERSHELL_CODE : null;
 export const probePowerPoint = IS_WIN ? driver.probePowerPoint : null;
 
 const USAGE = `用法: node draw.mjs <spec.json> [<spec2.json> …] [--delay 毫秒] [--out <pptx>]
-                              [--events <steps.jsonl>]
+                              [--events <steps.jsonl>] [--skin <id>] [--window l,t,w,h]
                               [--no-activate] [--no-animation] [--append] [--keep-script]
 
 多个 spec = 一份多页 PPT（顺序按参数顺序）；一份顶层带 slides 数组的 deck 文件同理。
+
+--skin <id>          覆盖**每一页**的皮肤（不改 spec 文件）。id 不在 14 套里直接退出码 2。
+--window l,t,w,h     把 PowerPoint 窗口摆到这个矩形（屏幕点、原点左上）。**只在 macOS 生效**，
+                     演示模式用；摆不动只记一条 warn，绝不让绘制失败。
 
 退出码: 0 成功 / 2 spec 校验失败或 --out 落点不合法 / 3 PowerPoint 没响应（要授权）
         5 画起来之后 PowerPoint 中途无响应（前台压着对话框）/ 1 其它`;
@@ -337,6 +345,8 @@ function parseArgs(argv) {
     animate: true,
     append: false,
     keepScript: false,
+    skin: null,      // --skin：覆盖每一页的皮肤；null = 各页用自己 spec 里写的
+    window: null,    // --window：{left, top, width, height}；null = 不动窗口
     help: false,
   };
   const abs = (v) => (isAbsolute(v) ? v : resolve(process.cwd(), v));
@@ -353,6 +363,13 @@ function parseArgs(argv) {
       case '--no-animation': opts.animate = false; break;
       case '--append': opts.append = true; break;
       case '--keep-script': opts.keepScript = true; break;
+      case '--skin': opts.skin = take(); break;
+      case '--window': {
+        const bounds = parseWindowBounds(take());
+        if (!bounds) throw new Error(WINDOW_ARG_ERROR);
+        opts.window = bounds;
+        break;
+      }
       // 隐藏参数，只给测试用：强行按某个平台选驱动器（见 resolvePlatform）。
       // 真正生效是在模块加载时扫 argv 完成的，这里只是别让它撞上「未知参数」。
       case '--platform': take(); break;
@@ -438,6 +455,61 @@ export function readAndValidateSpec(pathOrPaths) {
   return { ok: true, code: 0, deck, slides: specs, title: deckTitle != null ? deckTitle : firstTitle, warnings };
 }
 
+/* ── --skin：一句话换皮肤，不重新生成 JSON ─────────────────────────────────
+ * 用户看完一版说「换成 handbook 皮肤」，重新让豆包吐一份一模一样、只差一个字段的 JSON
+ * 又慢又容易漂（节点顺序、标签措辞都可能变）。所以给运行器一个覆盖口：同一份 spec，
+ * 换一个皮肤再画一遍。
+ *
+ * 覆盖的是**每一页**：deck 里各页原本可以各写各的 skin，`--skin` 一给就全部拉齐 ——
+ * 「换成 handbook」说的是这份 PPT，不是其中某一页。
+ */
+
+/**
+ * 把每一页的 `skin` 覆盖成同一个 id。**不抛异常**，结果自带判定。
+ *
+ * id 必须严格在 `project/lib/skins.mjs` 的 `SKINS` 里（14 套全认，不只新版四款）。
+ * 拼错了**不许静默回退默认皮肤** —— spec 里写错 skin 是一条 warning（校验器那条，
+ * 因为 spec 是豆包生成的、宁可画出来），而 `--skin` 是人当场敲的，敲错了他要的是
+ * 「你敲错了」，不是一张跟上一版一模一样的图。
+ *
+ * @param {{ok?: boolean, slides?: object[]}} loaded readAndValidateSpec 的结果
+ * @param {string|null|undefined} skinId 没给（null / undefined）就原样返回，一个字段都不动
+ * @returns {object|{ok: false, code: 2, message: string}}
+ */
+export function applySkin(loaded, skinId) {
+  if (skinId == null) return loaded;
+  const id = String(skinId);
+  if (!Object.prototype.hasOwnProperty.call(SKINS, id)) {
+    return {
+      ok: false,
+      code: 2,
+      // 前缀跟校验失败那一路一致：调用方（豆包）只看最后一行，"spec 校验失败：" 已经
+      // 教会它「这是改 spec / 改参数能解决的事」，别再发明第二种说法
+      message: `spec 校验失败：皮肤 "${id}" 不存在（可选: ${Object.keys(SKINS).join('/')}）`,
+    };
+  }
+  const slides = (Array.isArray(loaded && loaded.slides) ? loaded.slides : [])
+    .map((spec) => ({ ...spec, skin: id }));
+  return { ...loaded, slides };
+}
+
+/** `--window` 解析失败时的固定文案。run.mjs 的结论行逐字用它。 */
+export const WINDOW_ARG_ERROR = '--window 要写成 left,top,width,height 四个整数';
+
+/**
+ * `--window left,top,width,height` → `{left, top, width, height}`。
+ * 四个**非负整数**，单位是屏幕点，**原点左上**（跟 System Events 一致）。
+ * 认不出来返回 null（调用方按「参数写错了」处理，退出码 1）。
+ */
+export function parseWindowBounds(text) {
+  const parts = String(text == null ? '' : text).split(',').map((s) => s.trim());
+  if (parts.length !== 4) return null;
+  if (!parts.every((p) => /^\d+$/.test(p))) return null;
+  const [left, top, width, height] = parts.map(Number);
+  if (!(width > 0) || !(height > 0)) return null;
+  return { left, top, width, height };
+}
+
 /**
  * 读校验的结果 → 绘制计划。**永远是多页形状**，单图就是只有一页的 deck。
  *
@@ -480,6 +552,8 @@ export function runDrawPlan(plan, opts, say) {
     activate: opts.activate !== false,
     animate: opts.animate !== false,
     keepScript: opts.keepScript === true,
+    // 不给 --window 时传 null：驱动器一句窗口语句都不生成，脚本与以前逐字节相同
+    windowBounds: opts.window || null,
   }, say);
 }
 
@@ -505,8 +579,15 @@ async function main() {
   if (outCheck.warning) say({ type: 'log', level: 'warn', message: outCheck.warning });
 
   // --- 1. 读 + 校验 --------------------------------------------------------
-  const loaded = readAndValidateSpec(opts.specs);
-  if (!loaded.ok) {
+  const validated = readAndValidateSpec(opts.specs);
+  if (!validated.ok) {
+    say({ type: 'error', message: validated.message });
+    return validated.code;
+  }
+  // --skin 在校验之后、算布局之前套上：皮肤不进校验（它不是 spec 的结构问题），
+  // 但必须赶在 buildPlan 读 spec.skin 之前
+  const loaded = applySkin(validated, opts.skin);
+  if (loaded.ok === false) {
     say({ type: 'error', message: loaded.message });
     return loaded.code;
   }
