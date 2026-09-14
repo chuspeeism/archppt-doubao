@@ -3261,3 +3261,36 @@ export function fromBuildSpec(raw) {
   if (missing) autoLayout(spec);
   return spec;
 }
+
+/**
+ * 工作台「新开一份 spec」的口径：首开种子 / 重置 / archEditor.openSpec / JSON 面板同用。
+ *
+ * 为什么不能直接用 fromBuildSpec：它只在「有叶子缺矩形」时才跑 autoLayout，而第 10 步的
+ * 束线并线（materializeBundles）藏在 autoLayout 末尾、还带 activeRules(spec).bundle 门控。
+ * 一份 positions 齐全的 spec 进工作台时 autoLayout 一步都不跑，也就没有束线端口，
+ * 走线器自由选面；而生成器（generate.mjs / scene-from-spec.mjs）是在**最终坐标**上
+ * materializeBundles 之后才 buildScene。两边必须同序，否则同一份文件两个样子——
+ * 实测 labs/batch2/14-银行核心账务.json：节点与容器 0 处不同，边 e1、e3 的 pts 各差 24px，
+ * 质检分 84（工作台首开） vs 92（生成器）。
+ *
+ * 这里**不补 autoFix**：生成器里 autoFix 排在「用户 positions 覆盖」之前，用户坐标最终
+ * 会盖回去；工作台 positions 齐全时全是用户坐标，再跑 autoFix 就是去挪它们，
+ * 违背「重新生成不丢手动编辑」。
+ *
+ * materializeBundles 幂等（进门先 clearAutoPorts 再重新决定），所以对已经在 fromBuildSpec
+ * 里跑过 autoLayout 的 spec 再过一遍，结果不变。
+ *
+ * 也**不改 fromBuildSpec 本身**：生成器与 bench 在它之后立刻 autoLayout，
+ * 把并线塞进去等于白跑一遍。
+ */
+export function openBuildSpec(raw) {
+  const spec = fromBuildSpec(raw);
+  // 手调 labelT 先存后还，与 generate.mjs 的 presetLabelT 同一做法
+  //（materializeBundles 落完端口会 relaxEdgeLabels，把标签重新落一次）
+  const preset = new Map((spec.edges || [])
+    .filter((e) => Number.isFinite(e.labelT))
+    .map((e) => [e.id, e.labelT]));
+  materializeBundles(spec);
+  spec.edges.forEach((e) => { if (preset.has(e.id)) e.labelT = preset.get(e.id); });
+  return spec;
+}

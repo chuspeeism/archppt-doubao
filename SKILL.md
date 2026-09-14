@@ -92,12 +92,44 @@ node "<技能目录>\runner\run.mjs" "<第 3 步写的 spec 绝对路径>" --del
 ```
 
 **两个平台都先跑一句 `node -v` 确认本机有 Node**（macOS 在终端里跑，Windows 在 PowerShell 里跑，
-同一条命令）。没有的话两边说同一句话：「这个技能需要 Node.js 18 或更高版本，请到 nodejs.org
-下载 LTS 版安装后重启豆包工作」，然后**停下等用户装好**，不要接着往下跑。
+同一条命令）。打得出版本号（18 或更高）就接着往下走；报「找不到 node」就按下面三步走。
 
-**不要自己去下载安装 Node**——macOS 上也不要 `brew install node`，Windows 上不要
-`winget install` / `choco install`，两个平台都不要用 `sudo` / `Start-Process -Verb RunAs`
-之类的提权命令。装运行时是用户自己的决定，技能只负责告诉他缺什么、去哪儿装。
+**第一步：先问用户，拿到同意再动手。** 照这个意思说一句：
+
+> 这个技能需要 Node.js（18 以上），你的电脑上还没装。要我现在帮你装吗？
+> （Windows：会用系统自带的 winget 安装官方 LTS 版，中途系统会弹一次「用户账户控制」
+> 确认框，请点「是」；macOS：会用 Homebrew 安装。）
+
+**用户没明确同意之前一条安装命令都不许跑**，也不要跳过这一步去执行上面那条绘制命令。
+
+**第二步：用户同意之后再装**，一个平台一条命令：
+
+```powershell
+winget install --id OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agreements
+```
+
+```bash
+brew install node
+```
+
+**第三步：装完重新跑一次 `node -v`。**
+
+- 打得出版本号 → 回到本步开头那条绘制命令，正常往下走。macOS 一般装完当场就能用。
+- 还是报「找不到 node」→ **Windows 上这是正常的**：新装的 Node 只对新开的终端可见，
+  同一个会话里看不到它。告诉用户「Node 已经装好了，请完全退出并重新打开豆包工作，
+  再回复「重试」」，然后停下，不要反复重试安装。
+
+**装不了的两种情况，改成让用户自己装，别绕别的路：**
+
+- **Windows 上没有 `winget`**（老版本 Windows 10 不带它，命令报「无法识别」）——让用户去
+  nodejs.org 下载 Windows 的 LTS 安装包（.msi）自己装，装完完全退出并重新打开豆包工作，
+  回复「重试」。
+- **macOS 上没有 Homebrew**（`brew -v` 报错）——让用户去 nodejs.org 下载 macOS 的 LTS
+  安装包（.pkg）自己装，装完回复「重试」。**不要替用户装 Homebrew**：那是另一套东西，
+  装它是用户自己的决定，不该由这个技能替他做。
+
+两个平台都**不许主动提权**：不用 `sudo`，也不用 `Start-Process -Verb RunAs`。
+（winget 自己弹的那个「用户账户控制」框不算——那是系统弹给用户点的，不是技能提的权。）
 
 通常 **30–60 秒**（画完之后面板上的完成态还会亮 20 秒才返回，这段也算在内）；
 PowerPoint 冷启动的那一次再多 20 秒左右。中途不要打断，也不要重复执行。
@@ -291,7 +323,9 @@ Windows 10/11 自带 Windows PowerShell 5.1，请检查 PATH 里有 `%SystemRoot
 - **不要修改 `runner/` 和 `project/` 里的任何代码文件**，那是绘制器本体，改了就画不出来了。
   （`runner/.state/` 是运行时目录，第 3 步就是往它里面写 spec，那不算改绘制器。）
 - **不要用电脑操作能力去碰 PowerPoint**（不点界面、不拖形状、不截图对照）。画图只经由第 4 步那条命令。
-- Windows 上不要提权（`Start-Process -Verb RunAs`）、不要替用户安装 Node 或 Office。
+- 不要主动提权：Windows 上不用 `Start-Process -Verb RunAs`，macOS 上不用 `sudo`。
+  **Node 只能在用户明确同意之后、按第 4 步那两条命令装**（winget / Homebrew）；
+  Office 一律不替用户装。
 
 ## 六、最小示例
 
