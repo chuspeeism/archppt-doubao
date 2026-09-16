@@ -20,14 +20,26 @@
 // 所以默认 scale = 0.5，**所有几何量与字号统一乘 scale**，出口即 pt。
 //
 // 导出名：sceneToDrawSteps / drawStepsSummary / flattenColor / DRAW_STEP_KINDS /
-//         DRAW_OP_KINDS / DRAW_DEFAULT_SCALE / DRAW_SHAPE_OPS
+//         DRAW_OP_KINDS / DRAW_DEFAULT_SCALE / DRAW_SHAPE_OPS / DRAW_QUICK_KINDS
 
 import { SCENE_THEME_DEFAULTS, svgFitFontSize, svgEstimateTextWidth, svgVariantStyle, svgMetric, svgMetricRaw, svgLenPx, svgPanelLabelPaint, svgEdgeWeight, svgEdgeInk } from './scene-svg.mjs';
+import { sceneTitleFit } from '../title-fit.mjs';
 import { dmlColor } from './drawingml.mjs';
 import { PPTX_TEXT_METRICS, pptxFonts } from './scene-pptx.mjs';
 
 /** step.kind 的全集。面板只认这六种，别的一律不许出现（见 shells/doubao/runner/panel/CONTRACT.md）。 */
 export const DRAW_STEP_KINDS = Object.freeze(['title', 'subtitle', 'container', 'node', 'edge', 'label']);
+
+/**
+ * 「小元素，逐个画时不停顿」的 step.kind —— 连线和线上的文字。
+ *
+ * 节点和大框是**大元素**，一个一个出现有观感，所以照 `--delay` 逐个停；连线与边标签
+ * 又小又多（diagram.json 里 34 步里有 18 步是它们），逐个停顿只是让人干等。
+ * 驱动器按这张表把每步之后的停顿分成两档：在表里的用 `quickDelayMs`，其余用 `delayMs`。
+ *
+ * **这里是单一来源**，两个驱动器（mac / win）都 import 它，别在驱动器里再抄一份字符串。
+ */
+export const DRAW_QUICK_KINDS = Object.freeze(['edge', 'label']);
 
 /** op.op 的全集。 */
 export const DRAW_OP_KINDS = Object.freeze(['rect', 'roundRect', 'text', 'line', 'label']);
@@ -173,12 +185,20 @@ export function sceneToDrawSteps(scene, theme, options) {
   // SVG 按字母基线定位，PowerPoint 的文本框按行盒中心定位，换算常数与 scene-pptx 同源。
   const fromBaseline = (baselineY, px) => baselineY - PPTX_TEXT_METRICS.baselineToCentral * px;
   if (scene.title && scene.title.text) {
-    const font = svgFitFontSize(scene.title.text, 56, scene.title.w);
-    const h = font * 1.25;
-    const w = Math.max(4, svgEstimateTextWidth(scene.title.text, font) * 1.35 + font);
-    const cy = fromBaseline(scene.title.y + font * 0.9, font);
+    // 标题仍是「一步一形状」，多行靠 text 里的换行出多段（驱动器按段落逐段设字号 / 字色 /
+    // 粗细，见 mac-powerpoint.mjs 的 para 累加），折行结论与 SVG / PPTX 同一份。
+    const fit = sceneTitleFit(scene.title);
+    const font = fit.px;
+    const rows = fit.lines.length;
+    const text = fit.lines.join('\n');
+    // 单行沿用标过的 font×1.25；多行取整块文字高（rows × lineH），锚点仍是盒子竖向居中，
+    // 盒子中心 = 第一行中心 + (行数-1) × lineH / 2，第一行落点与单行时一致。
+    const h = rows > 1 ? rows * fit.lineH : font * 1.25;
+    const widest = fit.lines.reduce((acc, line) => Math.max(acc, svgEstimateTextWidth(line, font)), 0);
+    const w = Math.max(4, widest * 1.35 + font);
+    const cy = fromBaseline(scene.title.y + font * 0.9, font) + (rows - 1) * fit.lineH / 2;
     push('title', 'title', scene.title.text, [
-      textBox({ x: scene.title.x, y: cy - h / 2, w, h }, scene.title.text, font,
+      textBox({ x: scene.title.x, y: cy - h / 2, w, h }, text, font,
         flattenColor(palette.text, pageBg) || '#000000', 'left', { bold: true }),
     ]);
   }

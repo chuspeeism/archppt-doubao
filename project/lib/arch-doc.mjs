@@ -18,6 +18,7 @@
 import { SLIDE_WIDTH, SLIDE_HEIGHT, normalizeLayoutId, getSlideLayout, getDefaultFrame } from './slide-layouts.mjs';
 import { SKINS, DEFAULT_SKIN, skinMetrics, skinLayout, skinCardWidth, skinCardHeight, skinExportTheme, skinCssVarMap, scaleMetrics, skinQualityOptions, skinPanelLabelRect, METRICS_DEFAULTS } from './skins.mjs';
 import { estimateTextWidth, checkQuality, QUALITY_RULES, edgesBundled, segmentOnSharedTrunk } from './quality-checker.mjs';
+import { fitTitle, TITLE_LINE, TITLE_PX, TITLE_MIN_PX, TITLE_MAX_LINES } from './title-fit.mjs';
 import { aabbIntersects, segmentIntersectsRect, segmentsIntersect, rectContains } from './geometry-utils.mjs';
 import { routeEdges, ROUTER_DEFAULTS, isEdgePort, snapEdgePort, edgePortAnchors, edgePortPoint } from './edge-router.mjs';
 import { edgeWeight } from './edge-weight.mjs';
@@ -2678,16 +2679,30 @@ export function tidySelection(spec, ids) {
 
 /* ---------------- 版式与外框 ---------------- */
 
-export const TITLE_LINE = 1.15;
+// TITLE_LINE / TITLE_PX / TITLE_MIN_PX / TITLE_MAX_LINES 都在 lib/title-fit.mjs 里，
+// 这里只是消费者。标题的折行与字号拟合一律走 fitTitle，四条链路共用同一份结论。
 
+// 标题块：先按版式框宽折行，行数或总高放不下就降字号（72 起、2px 一档、最低 36）。
+// 返回的 titleLines / titlePx 是**唯一**的排版结论，工作台画布与三个导出器都照它画。
 export function titleBlock(spec) {
   const box = getSlideLayout(spec.layout).titleBox;
-  const titlePx = 56;
   const subPx = 24;
-  const h = titlePx * TITLE_LINE + (spec.subtitle ? 12 + subPx * 1.4 : 0);
-  const centered = box.align === 'top-center';
+  // 副标题占掉的高度先从框高里扣掉，剩下的才是标题能用的竖向空间
+  const subH = spec.subtitle ? 12 + subPx * 1.4 : 0;
+  const fit = fitTitle(spec.title || '', {
+    basePx: TITLE_PX, minPx: TITLE_MIN_PX, maxLines: TITLE_MAX_LINES,
+    lineHeight: TITLE_LINE, maxW: box.w, maxH: Math.max(0, box.h - subH),
+  });
+  const h = fit.h + subH;
+  // 版式 A 的竖向居中按**真实**标题高算（折行之后可能是好几行，不能再按一行高算）
   const y = box.align === 'left-center' ? box.y + Math.max(0, (box.h - h) / 2) : box.y;
-  return { x: box.x, y: Math.round(y), w: box.w, h: Math.round(h), centered, titlePx, subPx };
+  return {
+    x: box.x, y: Math.round(y), w: box.w, h: Math.round(h),
+    // 三套版式现在都是左对齐（版式 C 2026-09-15 起与架构图左边对齐），没有居中态了。
+    // 字段保留是为了老调用方不炸，恒 false。
+    centered: false,
+    titlePx: fit.px, titleLines: fit.lines, titleLineH: fit.lineH, titleH: fit.h, subPx,
+  };
 }
 
 export function captureGeometry(spec) {
@@ -2761,10 +2776,15 @@ export function buildScene(spec, opts = {}) {
 
   const tb = titleBlock(spec);
   if (spec.title) {
-    scene.title = { text: spec.title, x: tb.centered ? tb.x : tb.x, y: tb.y, w: tb.w, h: tb.titlePx * TITLE_LINE };
+    // px / lines 是排版结论，导出器直接采信（见 lib/title-fit.mjs 的 sceneTitleFit）。
+    // h 是折行后的真实高度，不再恒按一行算。
+    scene.title = {
+      text: spec.title, x: tb.x, y: tb.y, w: tb.w, h: tb.titleH,
+      px: tb.titlePx, lines: tb.titleLines.slice(),
+    };
   }
   if (spec.subtitle) {
-    scene.subtitle = { text: spec.subtitle, x: tb.x, y: tb.y + tb.titlePx * TITLE_LINE + 12, w: tb.w, h: tb.subPx * 1.4 };
+    scene.subtitle = { text: spec.subtitle, x: tb.x, y: tb.y + tb.titleH + 12, w: tb.w, h: tb.subPx * 1.4 };
   }
 
   leafNodes(spec).forEach((n) => {

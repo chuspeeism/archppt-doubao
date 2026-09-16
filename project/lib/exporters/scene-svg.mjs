@@ -4,6 +4,7 @@
 // SVG 没有 z-index，谁后画谁在上：连线是全图最顶层的可见物，必须整体排在节点之后，
 // 否则节点卡片会把穿过它的线段盖断（六种导出共用这一份，PPTX/PDF 里同样会断）。
 import { edgeWeight, arrowMarkerGeometry, splitColorAlpha } from '../edge-weight.mjs';
+import { sceneTitleFit } from '../title-fit.mjs';
 
 export const SCENE_THEME_DEFAULTS = Object.freeze({
   background: '#090d14',
@@ -45,6 +46,8 @@ export const svgEstimateTextWidth = (text, px) => {
 };
 
 // 超宽时按比例缩小字号（不换行），下限 15px——低于此可读性崩坏，宁可轻微溢出。
+// **这条政策只管节点标签 / 容器标签 / 边标签**；左上角那行大标题走 lib/title-fit.mjs 的
+// 「先折行、装不下再缩」（下限 36px），两条政策不要互相抄。
 export const svgFitFontSize = (text, basePx, maxW, minPx = 15) => {
   const width = svgEstimateTextWidth(text, basePx);
   if (width <= 0 || maxW <= 0 || width <= maxW) return basePx;
@@ -428,8 +431,14 @@ export function sceneToSvg(scene, theme) {
 
   // 2. 标题 / 副标题
   if (scene.title && scene.title.text) {
-    const font = svgFitFontSize(scene.title.text, 56, scene.title.w);
-    parts.push(`<text class="scene-title" x="${svgNum(scene.title.x)}" y="${svgNum(scene.title.y + font * 0.9)}" font-size="${svgNum(font)}" font-weight="720" fill="${palette.text}">${svgEsc(scene.title.text)}</text>`);
+    // 多行标题：一个 <text> 里逐行 <tspan>，第一行落在 y = title.y + px*0.9（字母基线），
+    // 之后每行 dy = lineH。折行结论优先用 scene.title.lines（构建期已算），没有就现场算。
+    const fit = sceneTitleFit(scene.title);
+    const x = svgNum(scene.title.x);
+    const spans = fit.lines
+      .map((line, i) => `<tspan x="${x}"${i ? ` dy="${svgNum(fit.lineH)}"` : ''}>${svgEsc(line)}</tspan>`)
+      .join('');
+    parts.push(`<text class="scene-title" x="${x}" y="${svgNum(scene.title.y + fit.px * 0.9)}" font-size="${svgNum(fit.px)}" font-weight="720" fill="${palette.text}">${spans}</text>`);
   }
   if (scene.subtitle && scene.subtitle.text) {
     const font = svgFitFontSize(scene.subtitle.text, 28, scene.subtitle.w);

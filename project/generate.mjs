@@ -74,6 +74,7 @@ const INLINE_LIB_FILES = [
   'lib/node-fit.mjs',
   'lib/geometry-utils.mjs',
   'lib/quality-checker.mjs',
+  'lib/title-fit.mjs',   // 必须排在 quality-checker 之后（默认估宽用它）、导出器之前
   'lib/edge-router.mjs',
   'lib/auto-fixer.mjs',
   'lib/icons/icon-matcher.mjs',
@@ -469,8 +470,8 @@ ${skinCssText(activeSkin, RENDER_METRICS)}
   #stage.layout-A .title-block { left:64px; top:64px; width:544px; height:952px; justify-content:center; }
   #stage.layout-A .title-block::before { top:calc(50% - 104px); }
   #stage.layout-B .title-block { left:64px; top:64px; width:800px; height:240px; }
-  #stage.layout-C .title-block { left:360px; top:64px; width:1200px; height:180px; align-items:center; text-align:center; }
-  #stage.layout-C .title-block::before { left:50%; transform:translateX(-50%); }
+  /* 版式 C 的标题 2026-09-15 起左对齐到架构图左边（x=120），不再居中 —— 见 docs/title-fit-spec.md */
+  #stage.layout-C .title-block { left:120px; top:64px; width:1680px; height:180px; }
   /* --type-scale: 外框(ARCHITECTURE)缩放系数, 由运行时写入。
      结构 token(--icon-size / --card-pad-x / --type-node ...)已由运行时按同一系数改写,
      此处只处理写死在 CSS 里的几何量: 圆角、描边宽、虚线段长、标签内边距。 */
@@ -753,7 +754,7 @@ ${edgeLabelHtml}
       <span class="layout-switch" aria-label="PPT 版式">
         <button type="button" data-layout="A" title="左标题，右架构图">A</button>
         <button type="button" data-layout="B" title="左上标题，下方架构图">B</button>
-        <button type="button" data-layout="C" title="居中标题，下方架构图">C</button>
+        <button type="button" data-layout="C" title="宽标题，下方架构图">C</button>
       </span>
       <span class="sep"></span>
       <button id="btn-quality" title="按共享准则复查几何质量(重叠/越界/交叉等); 要重排请回工作台">质量检查</button>

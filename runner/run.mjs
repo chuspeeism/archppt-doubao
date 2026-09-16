@@ -14,8 +14,8 @@
 //     → stdout 最后一行固定是「已保存：<pptx 绝对路径>」
 //
 // 用法：
-//   node run.mjs <spec.json> [<spec2.json> …] [--delay 350] [--out <pptx>] [--port 7431]
-//                            [--no-open] [--keep-panel 20] [--dry-run]
+//   node run.mjs <spec.json> [<spec2.json> …] [--delay 350] [--quick-delay 0] [--out <pptx>]
+//                            [--port 7431] [--no-open] [--keep-panel 20] [--dry-run]
 //                            [--skin <id>] [--window left,top,width,height]
 //
 // **一份 PPT 可以有多套架构图**（deck）。两种写法：
@@ -26,6 +26,7 @@
 // | 参数 | 默认 | 说明 |
 // |---|---|---|
 // | `--delay <毫秒>` | 350 | 每步之后停多久，给人看；出片设 0 |
+// | `--quick-delay <毫秒>` | 0 | 连线与线上文字每步之后停多久，默认 0（小元素快画）；大元素仍按 `--delay` |
 // | `--out <pptx>` | `~/Desktop/架构图-YYYYMMDD-HHmmss.pptx` | 另存路径；不给时同名自动加 -2 / -3，不覆盖 |
 // | `--port <端口>` | 7431 | 面板端口；已被占用就当作「上一次的面板还在跑」直接复用 |
 // | `--no-open` | 关 | 不自动打开浏览器 |
@@ -91,12 +92,13 @@ import {
 } from './draw.mjs';
 import { createPanelServer } from './panel/server.mjs';
 
-const USAGE = `用法: node run.mjs <spec.json> [<spec2.json> …] [--delay 350] [--out <pptx>]
-                          [--port 7431] [--no-open] [--keep-panel 20] [--dry-run]
+const USAGE = `用法: node run.mjs <spec.json> [<spec2.json> …] [--delay 350] [--quick-delay 0]
+                          [--out <pptx>] [--port 7431] [--no-open] [--keep-panel 20] [--dry-run]
                           [--skin <id>] [--window left,top,width,height]
 
 多个 spec = 一份多页 PPT（顺序按参数顺序）；一份顶层带 slides 数组的 deck 文件同理。
 
+--quick-delay <毫秒> 连线与线上文字每步之后停多久，默认 0（小元素快画）；大元素仍按 --delay。
 --skin <id>          覆盖**每一页**的皮肤（不改 spec 文件），用来「同一份 JSON 换个皮肤再画一遍」。
                      id 不在 14 套里 = 退出码 2，最后一行「失败：spec 校验失败：皮肤 … 不存在」。
 --window l,t,w,h     把 PowerPoint 窗口摆到这个矩形（屏幕点、原点左上）。**只在 macOS 生效**，
@@ -113,10 +115,13 @@ const USAGE = `用法: node run.mjs <spec.json> [<spec2.json> …] [--delay 350]
              最后一行「失败：没有 PowerShell —— …」
       PowerPoint 画到一半被关掉 / 崩了仍是退出码 1，最后一行「失败：PowerPoint 中途退出 —— …」`;
 
-function parseArgs(argv) {
+export function parseArgs(argv) {
   const opts = {
     specs: [],
     delay: 350,
+    // 连线与线上文字（draw-steps 的 DRAW_QUICK_KINDS）每步之后停多久。默认 0 = 小元素快画，
+    // 大元素（容器 / 节点 / 标题）仍按 --delay 逐个停顿。
+    quickDelay: 0,
     out: null,
     port: 7431,
     open: true,
@@ -139,6 +144,7 @@ function parseArgs(argv) {
     const take = () => { if (inline != null) return inline; i += 1; return argv[i]; };
     switch (key) {
       case '--delay': opts.delay = Number(take()); break;
+      case '--quick-delay': opts.quickDelay = Number(take()); break;
       case '--out': opts.out = abs(take()); break;
       case '--port': opts.port = Number(take()); break;
       case '--no-open': opts.open = false; break;
@@ -172,6 +178,7 @@ function parseArgs(argv) {
     }
   }
   if (!Number.isFinite(opts.delay) || opts.delay < 0) throw new Error('--delay 必须是非负毫秒数');
+  if (!Number.isFinite(opts.quickDelay) || opts.quickDelay < 0) throw new Error('--quick-delay 必须是非负毫秒数');
   if (!Number.isFinite(opts.port) || opts.port < 1 || opts.port > 65535) throw new Error('--port 不合法');
   if (!Number.isFinite(opts.keepPanel) || opts.keepPanel < 0) throw new Error('--keep-panel 必须是非负秒数');
   return opts;

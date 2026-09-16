@@ -17,9 +17,11 @@ export const SLIDE_LAYOUTS = Object.freeze({
     margins: Object.freeze({ top: 64, right: 64, bottom: 64, left: 64, gap: 0 }),
   }),
   C: Object.freeze({
+    // 2026-09-15：标题从「居中」改成「与架构图左边对齐」。原本标题框从 x=360 起、
+    // 架构图从 x=120 起，本身就偏右 240px，导出时标题一律左锚在 360 → 看起来是「标题向右漂」。
     id: 'C',
-    label: '居中标题 · 下方架构图',
-    titleBox: Object.freeze({ x: 360, y: 64, w: 1200, h: 180, align: 'top-center' }),
+    label: '宽标题 · 下方架构图',
+    titleBox: Object.freeze({ x: 120, y: 64, w: 1680, h: 180, align: 'top-left' }),
     diagramBox: Object.freeze({ x: 120, y: 244, w: 1680, h: 772 }),
     margins: Object.freeze({ top: 64, right: 120, bottom: 64, left: 120, gap: 0 }),
   }),

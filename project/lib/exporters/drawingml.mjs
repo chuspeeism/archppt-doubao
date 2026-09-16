@@ -199,13 +199,20 @@ export function dmlCustomShape(o) {
 }
 
 /**
- * 单行文本框。锚点口径与 SVG 的 text 对齐：
+ * 文本框（单行，或用 `lines` 传多行）。锚点口径与 SVG 的 text 对齐：
  *   align 'middle' → 盒子在 cx 居中、段落居中；'start' → 盒子左缘落在 x、段落左对齐。
- * 竖直方向一律「盒子中心对齐到 cy + nudge」，盒高取行高，anchor=ctr。
+ * 竖直方向一律「盒子中心对齐到 cy + nudge」，盒高默认取 lineH，anchor=ctr。
+ *
+ * 多行（`lines` 给两行以上）：仍是**一个**形状、一个段落，行间插 `<a:br/>`；
+ * `lnSpc` 写的是 `lineH`（精确行距），盒高用 `boxH` 另给。
+ * 调用方要保证「盒子中心 = 整块文字的中心」，这样第一行的落点与单行时**完全一致**
+ * ——单行的竖直落点是在真 PowerPoint 上标过的（pptxFromBaseline），不能因为支持多行就动它。
  */
 export function dmlTextShape(o) {
   const px = Number(o.px) || 16;
   const lineH = Number.isFinite(o.lineH) ? o.lineH : px * 1.2;
+  const lines = Array.isArray(o.lines) && o.lines.length ? o.lines.map((l) => String(l ?? '')) : [String(o.text ?? '')];
+  const boxH = Number.isFinite(o.boxH) && o.boxH > 0 ? Number(o.boxH) : lineH;
   const w = Number.isFinite(o.w) && o.w > 0 ? o.w : Math.max(8, px * String(o.text || '').length * 1.2);
   const cy = Number(o.cy) + (Number(o.nudge) || 0);
   const x = o.align === 'start' ? Number(o.x) : Number(o.cx) - w / 2;
@@ -216,8 +223,13 @@ export function dmlTextShape(o) {
   const font = `<a:latin typeface="${dmlEsc(o.latin || 'Helvetica Neue')}"/>`
     + `<a:ea typeface="${dmlEsc(o.ea || 'PingFang SC')}"/>`
     + `<a:cs typeface="${dmlEsc(o.ea || 'PingFang SC')}"/>`;
+  // 换行符自己也带一份 rPr：裸 <a:br/> 会继承默认字号，行高就跟着变了
+  const rPr = `<a:rPr lang="zh-CN" altLang="en-US" sz="${dmlSz(px)}" b="${o.bold ? 1 : 0}"${spc} dirty="0">${fill}${font}</a:rPr>`;
+  const body = lines
+    .map((line) => `<a:r>${rPr}<a:t>${dmlEsc(line)}</a:t></a:r>`)
+    .join(`<a:br>${rPr}</a:br>`);
   return `<p:sp>${dmlNvSp(o.id, o.name || 'text', true)}`
-    + `<p:spPr>${dmlXfrm(x, cy - lineH / 2, w, lineH)}`
+    + `<p:spPr>${dmlXfrm(x, cy - boxH / 2, w, boxH)}`
     + '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr>'
     + '<p:txBody>'
     + '<a:bodyPr wrap="none" lIns="0" tIns="0" rIns="0" bIns="0" rtlCol="0" anchor="ctr" anchorCtr="0">'
@@ -225,9 +237,7 @@ export function dmlTextShape(o) {
     + `<a:p><a:pPr algn="${algn}" marL="0" marR="0" indent="0">`
     + `<a:lnSpc><a:spcPts val="${dmlSz(lineH)}"/></a:lnSpc>`
     + '<a:spcBef><a:spcPts val="0"/></a:spcBef><a:spcAft><a:spcPts val="0"/></a:spcAft></a:pPr>'
-    + `<a:r><a:rPr lang="zh-CN" altLang="en-US" sz="${dmlSz(px)}" b="${o.bold ? 1 : 0}"${spc} dirty="0">`
-    + fill + font + '</a:rPr>'
-    + `<a:t>${dmlEsc(o.text)}</a:t></a:r>`
+    + body
     + `<a:endParaRPr lang="zh-CN" sz="${dmlSz(px)}"/>`
     + '</a:p></p:txBody></p:sp>';
 }

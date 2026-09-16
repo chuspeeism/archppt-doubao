@@ -19,6 +19,7 @@
 //   readAndValidateSpec            读 + 校验（一个路径或一串路径；认 deck）
 //   buildPlan                      loaded → { slides: [{scene, theme, steps, summary}], summary }
 //   runDrawPlan                    plan → 驱动 PowerPoint（多页）
+//   parseArgs                      命令行 → opts（run.mjs 有自己那份；这份给测试核对默认值）
 //
 // **一份 PPT 可以有多套架构图**（deck）。两种写法都行：
 //   ① 一份 deck 文件：`{ "title": "整套的名字", "slides": [ 单图 spec, 单图 spec ] }`
@@ -27,12 +28,13 @@
 // 没有 slides 的单图 spec 行为一个字都不变。
 //
 // 用法：
-//   node draw.mjs <spec.json> [<spec2.json> …] [--delay 400] [--out <pptx>]
+//   node draw.mjs <spec.json> [<spec2.json> …] [--delay 400] [--quick-delay 0] [--out <pptx>]
 //                             [--events <steps.jsonl>] [--skin <id>] [--window l,t,w,h]
 //                             [--no-activate] [--no-animation] [--append] [--keep-script]
 //
 // 默认值：
 //   --delay    400（每步之后停 400ms，给人看；出片设 0）
+//   --quick-delay 0（连线与线上文字每步之后停多久，默认 0（小元素快画）；大元素仍按 --delay）
 //   --out      ~/Desktop/架构图-YYYYMMDD-HHmmss.pptx（同名自动加 -2 / -3）
 //   --events   <本目录>/.state/steps.jsonl
 //   --skin     不给就各页用自己 spec 里写的 skin；给了就**覆盖每一页**（见 applySkin）
@@ -149,12 +151,13 @@ export const NO_POWERSHELL_CODE = IS_WIN ? driver.WIN_NO_POWERSHELL_CODE : null;
  */
 export const probePowerPoint = IS_WIN ? driver.probePowerPoint : null;
 
-const USAGE = `用法: node draw.mjs <spec.json> [<spec2.json> …] [--delay 毫秒] [--out <pptx>]
-                              [--events <steps.jsonl>] [--skin <id>] [--window l,t,w,h]
+const USAGE = `用法: node draw.mjs <spec.json> [<spec2.json> …] [--delay 毫秒] [--quick-delay 毫秒]
+                              [--out <pptx>] [--events <steps.jsonl>] [--skin <id>] [--window l,t,w,h]
                               [--no-activate] [--no-animation] [--append] [--keep-script]
 
 多个 spec = 一份多页 PPT（顺序按参数顺序）；一份顶层带 slides 数组的 deck 文件同理。
 
+--quick-delay <毫秒> 连线与线上文字每步之后停多久，默认 0（小元素快画）；大元素仍按 --delay。
 --skin <id>          覆盖**每一页**的皮肤（不改 spec 文件）。id 不在 14 套里直接退出码 2。
 --window l,t,w,h     把 PowerPoint 窗口摆到这个矩形（屏幕点、原点左上）。**只在 macOS 生效**，
                      演示模式用；摆不动只记一条 warn，绝不让绘制失败。
@@ -335,10 +338,13 @@ export function decodeSpecText(buf) {
   return text;
 }
 
-function parseArgs(argv) {
+export function parseArgs(argv) {
   const opts = {
     specs: [],
     delay: 400,
+    // 连线与线上文字（draw-steps 的 DRAW_QUICK_KINDS）每步之后停多久。默认 0 = 小元素快画，
+    // 大元素（容器 / 节点 / 标题）仍按 --delay 逐个停顿。
+    quickDelay: 0,
     out: null,
     events: DEFAULT_EVENTS,
     activate: true,
@@ -357,6 +363,7 @@ function parseArgs(argv) {
     const take = () => { if (inline != null) return inline; i += 1; return argv[i]; };
     switch (key) {
       case '--delay': opts.delay = Number(take()); break;
+      case '--quick-delay': opts.quickDelay = Number(take()); break;
       case '--out': opts.out = abs(take()); break;
       case '--events': opts.events = abs(take()); break;
       case '--no-activate': opts.activate = false; break;
@@ -381,6 +388,7 @@ function parseArgs(argv) {
     }
   }
   if (!Number.isFinite(opts.delay) || opts.delay < 0) throw new Error('--delay 必须是非负毫秒数');
+  if (!Number.isFinite(opts.quickDelay) || opts.quickDelay < 0) throw new Error('--quick-delay 必须是非负毫秒数');
   return opts;
 }
 
@@ -548,6 +556,8 @@ export function runDrawPlan(plan, opts, say) {
   }));
   return runDrawDeck(pages, {
     delayMs: opts.delay,
+    // 连线与线上文字那一档。opts 没带就传 undefined，驱动器按 delayMs 处理（老行为）。
+    quickDelayMs: opts.quickDelay,
     outPath: opts.out,
     activate: opts.activate !== false,
     animate: opts.animate !== false,

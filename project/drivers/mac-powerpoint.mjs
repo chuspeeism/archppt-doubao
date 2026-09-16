@@ -39,6 +39,9 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+// 「哪些 kind 算小元素」的单一来源。相对路径在开发仓与出货仓里一模一样（投影零改写）。
+import { DRAW_QUICK_KINDS } from '../lib/exporters/draw-steps.mjs';
+
 /** 坑 1 的那八个词。生成的脚本里不许有同名变量。 */
 export const APPLESCRIPT_RESERVED = Object.freeze(
   ['x', 'y', 'width', 'height', 'rotation', 'opacity', 'colors', 'visibility'],
@@ -413,7 +416,10 @@ const normalizeSlides = (slides) => {
  *   `@@ANIM fail …` / `@@BG fail …` / `@@WINDOW fail …`（尽力而为的三项失败时各报一次）
  *
  * @param {Array<{steps: Array, background?: string|null, title?: string|null}>} slides 每项一页
- * @param {object} [options] delayMs 每步之后停多久（演示 400，出片 0）；outPath 另存路径；
+ * @param {object} [options] delayMs 每步之后停多久（演示 400，出片 0）；
+ *                           quickDelayMs 连线与线上文字（DRAW_QUICK_KINDS）每步之后停多久，
+ *                           **不给就等于 delayMs**（= 加这个参数之前的行为，逐字节相同）；
+ *                           outPath 另存路径；
  *                           activate 是否把 PowerPoint 拉到前台；animate 是否加进入动画；
  *                           windowBounds `{left, top, width, height}`（屏幕点、原点左上）
  *                           = 把新建演示文稿的窗口摆到这里，**不给就一句窗口语句都不生成**
@@ -423,6 +429,10 @@ export function deckToAppleScript(slides, options) {
   const pages = normalizeSlides(slides);
   const delayMs = Number.isFinite(opts.delayMs) ? Math.max(0, opts.delayMs) : 0;
   const delaySec = Math.round(delayMs) / 1000;
+  // 小元素（连线、线上文字）走第二档。不给 quickDelayMs 就跟 delayMs 一个值 ——
+  // 生成的脚本与加这个参数之前逐字节相同。
+  const quickDelayMs = Number.isFinite(opts.quickDelayMs) ? Math.max(0, opts.quickDelayMs) : delayMs;
+  const quickDelaySec = Math.round(quickDelayMs) / 1000;
   const animate = opts.animate !== false;
   const grandTotal = pages.reduce((n, p) => n + p.steps.length, 0);
   const out = [];
@@ -520,7 +530,8 @@ export function deckToAppleScript(slides, options) {
         if (res.shapeRef) shapeRef = res.shapeRef;
       }
       out.push(`\t\tmy emit("@@STEP ${gi} done")`);
-      if (delaySec > 0) out.push(`\t\tdelay ${delaySec}`);
+      const sec = DRAW_QUICK_KINDS.includes(step.kind) ? quickDelaySec : delaySec;
+      if (sec > 0) out.push(`\t\tdelay ${sec}`);
       out.push('');
     }
 
@@ -565,7 +576,8 @@ export function stepsToAppleScript(steps, options) {
  * 生成脚本 → 跑 osascript → 逐行把标记翻译成事件。**多页版**。
  *
  * @param {Array<{steps: Array, background?: string|null, title?: string|null}>} slides 每项一页
- * @param {object} options 同 deckToAppleScript，另加 keepScript（留下临时脚本便于排错）
+ * @param {object} options 同 deckToAppleScript（delayMs / quickDelayMs 原样透传给它），
+ *                 另加 keepScript（留下临时脚本便于排错）
  * @param {(event: object) => void} [onEvent] 事件回调，形状见 shells/doubao/runner/panel/CONTRACT.md
  * @returns {Promise<{file: string|null, shapes: number|null, elapsedMs: number,
  *                    animation: boolean, script: string, slides: number}>}

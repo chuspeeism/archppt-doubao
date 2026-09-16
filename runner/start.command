@@ -18,6 +18,8 @@ EVENTS="$STATE/steps.jsonl"
 INBOX="$STATE/inbox"
 PORT="${DOUBAO_PANEL_PORT:-7431}"
 DELAY="${DOUBAO_DRAW_DELAY:-400}"
+# 连线与线上文字每步之后停多久，默认 0（小元素快画）；大元素仍按 DOUBAO_DRAW_DELAY
+QUICK_DELAY="${DOUBAO_DRAW_QUICK_DELAY:-0}"
 WAIT_SECONDS="${DOUBAO_WAIT_SECONDS:-600}"
 
 mkdir -p "$STATE" "$INBOX"
@@ -110,10 +112,10 @@ process.stdin.on("data", (d) => { s += d; }).on("end", () => {
 
 echo ""
 echo "收到 spec：$SPEC"
-echo "开始画（每步停 ${DELAY}ms）——PowerPoint 会被拉到前台，别动鼠标。"
+echo "开始画（大元素每步停 ${DELAY}ms，连线与线上文字停 ${QUICK_DELAY}ms）——PowerPoint 会被拉到前台，别动鼠标。"
 echo ""
 
-node "$HERE/draw.mjs" "$SPEC" --delay "$DELAY" --events "$EVENTS" --append
+node "$HERE/draw.mjs" "$SPEC" --delay "$DELAY" --quick-delay "$QUICK_DELAY" --events "$EVENTS" --append
 DRAW_RC=$?
 
 echo ""

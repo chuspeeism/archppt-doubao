@@ -12,12 +12,14 @@
 //       start/done 带 ms，两份互为佐证。
 //
 // 用法：
-//   node "<技能目录>/runner/verify.mjs" [--quick] [--delay 350] [--out-dir <目录>] [--spec <json>]
+//   node "<技能目录>/runner/verify.mjs" [--quick] [--delay 350] [--quick-delay 0]
+//                                      [--out-dir <目录>] [--spec <json>]
 //
 // | 参数 | 默认 | 说明 |
 // |---|---|---|
 // | `--quick` | 关 | 跳过「两页 deck」那一步，只验单页（快一半） |
 // | `--delay <毫秒>` | 350 | 传给 run.mjs 的逐步延时。**别设 0** —— 设 0 就看不见「逐个画」了 |
+// | `--quick-delay <毫秒>` | 0 | 连线与线上文字每步之后停多久，默认 0（小元素快画）；大元素仍按 `--delay` |
 // | `--out-dir <目录>` | `<桌面>/架构图验收-<时间戳>/` | 证据落在哪。**必须在桌面/文稿/下载底下**，PowerPoint 沙盒只对这几处默认放行 |
 // | `--spec <json>` | 引擎根的 `diagram.json`，没有就用内置兜底 | 第一页用哪份 spec |
 //
@@ -68,13 +70,16 @@ const { buildStoreZip } = await import(
 
 /* ══ 0. 常量与小工具 ══════════════════════════════════════════════════════ */
 
-const USAGE = `用法: node verify.mjs [--quick] [--delay 350] [--out-dir <目录>] [--spec <json>]
+const USAGE = `用法: node verify.mjs [--quick] [--delay 350] [--quick-delay 0]
+                     [--out-dir <目录>] [--spec <json>]
 
 一条命令跑完豆包特供版的验收，产出一个 zip 证据包（默认落桌面）。
 任何一步失败都照样出包 —— 把 zip 发回去就行，判读不用在这台机器上做。
 
   --quick          跳过「两页 deck」那一步，只验单页
   --delay <毫秒>   传给 run.mjs 的逐步延时，默认 350（别设 0，设 0 就看不见逐个画）
+  --quick-delay <毫秒>
+                   连线与线上文字每步之后停多久，默认 0（小元素快画）；大元素仍按 --delay
   --out-dir <目录> 证据落在哪，默认 <桌面>/架构图验收-<时间戳>/
   --spec <json>    第一页用哪份 spec，默认引擎根的 diagram.json（出货包里没有那份，
                    会退回 verify.mjs 自带的兜底示例，写进证据目录）
@@ -831,7 +836,10 @@ async function platformZip(outDir, zipPath) {
 /* ══ 9. 主流程 ════════════════════════════════════════════════════════════ */
 
 export function parseArgs(argv) {
-  const opts = { quick: false, delay: 350, outDir: null, spec: null, dryOnly: false, help: false };
+  // quickDelay：连线与线上文字（draw-steps 的 DRAW_QUICK_KINDS）那一档停顿，默认 0 = 小元素快画
+  const opts = {
+    quick: false, delay: 350, quickDelay: 0, outDir: null, spec: null, dryOnly: false, help: false,
+  };
   const abs = (v) => (isAbsolute(v) ? v : resolve(process.cwd(), v));
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -841,6 +849,7 @@ export function parseArgs(argv) {
     switch (key) {
       case '--quick': opts.quick = true; break;
       case '--delay': opts.delay = Number(take()); break;
+      case '--quick-delay': opts.quickDelay = Number(take()); break;
       case '--out-dir': opts.outDir = abs(take()); break;
       case '--spec': opts.spec = abs(take()); break;
       // 隐藏参数，只给测试用：跑到干跑就收工打包，不碰 PowerPoint、不截屏。USAGE 里不列。
@@ -850,6 +859,7 @@ export function parseArgs(argv) {
     }
   }
   if (!Number.isFinite(opts.delay) || opts.delay < 0) throw new Error('--delay 必须是非负毫秒数');
+  if (!Number.isFinite(opts.quickDelay) || opts.quickDelay < 0) throw new Error('--quick-delay 必须是非负毫秒数');
   return opts;
 }
 
@@ -922,6 +932,7 @@ async function main() {
     输出目录: outDir,
     'spec（第一页）': `${specPath}（${specSource}）`,
     逐步延时: `${opts.delay} ms`,
+    '连线与线上文字延时': `${opts.quickDelay} ms`,
     模式: `${opts.quick ? '--quick（跳过两页 deck）' : '完整（单页 + 两页 deck）'}${opts.dryOnly ? ' + --dry-only（只到干跑）' : ''}`,
     版本: readVersion() || '（读不到 version.json）',
     开始时间: startedAt.toISOString(),
@@ -967,6 +978,7 @@ async function main() {
     const r = await runNode([
       runMjs, ...specs,
       '--delay', String(opts.delay),
+      '--quick-delay', String(opts.quickDelay),
       '--no-open', '--keep-panel', '0',
       '--out', parked, '--events', events,
     ], { timeoutMs: DRAW_TIMEOUT_MS });
@@ -1127,7 +1139,8 @@ async function main() {
       platform: process.platform, platformName: PLATFORM_NAME, arch: arch(), release: release(),
       node: process.version, engineRoot: ENGINE_ROOT, runnerDir: RUNNER_DIR,
       skillDir: dirname(RUNNER_DIR), desktop: desktopDir(), outDir, spec: specPath,
-      specSource, delayMs: opts.delay, quick: opts.quick, dryOnly: opts.dryOnly,
+      specSource, delayMs: opts.delay, quickDelayMs: opts.quickDelay,
+      quick: opts.quick, dryOnly: opts.dryOnly,
       version: readVersion(), startedAt: startedAt.toISOString(), finishedAt: new Date().toISOString(),
       powerShell: env['PowerShell 版本'] || null,
       steps: steps.map((s) => ({ name: s.name, ok: s.ok, note: s.note })),

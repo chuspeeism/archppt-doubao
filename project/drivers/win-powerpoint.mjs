@@ -56,6 +56,9 @@ import { accessSync, constants, mkdtempSync, writeFileSync, rmSync } from 'node:
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+// 「哪些 kind 算小元素」的单一来源，与 mac 驱动器共用同一张表（照抄 mac 的设计，见上）。
+import { DRAW_QUICK_KINDS } from '../lib/exporters/draw-steps.mjs';
+
 /* ══ 1. 错误码与判词 ══════════════════════════════════════════════════════ */
 
 /**
@@ -475,7 +478,10 @@ const deckIndex = (pages) => {
  * 多页绘制指令流 → 可直接交给 powershell.exe 的脚本文本。
  *
  * @param {Array<{steps: Array, background?: string, title?: string}>} slides
- * @param {object} [options] delayMs 每步之后停多久；outPath 另存路径；slideTitle 缺省页标题；
+ * @param {object} [options] delayMs 每步之后停多久；
+ *                           quickDelayMs 连线与线上文字（DRAW_QUICK_KINDS）每步之后停多久，
+ *                           **不给就等于 delayMs**（= 加这个参数之前的行为，逐字节相同）；
+ *                           outPath 另存路径；slideTitle 缺省页标题；
  *                           activate 是否把 PowerPoint 拉到前台；background 缺省底色；
  *                           animate 是否加进入动画
  * @returns {string}
@@ -485,6 +491,9 @@ export function deckToPowerShell(slides, options) {
   const pages = normalizeSlides(slides, opts);
   const { total, offsets } = deckIndex(pages);
   const delayMs = Number.isFinite(opts.delayMs) ? Math.max(0, Math.round(opts.delayMs)) : 0;
+  // 小元素（连线、线上文字）走第二档；不给就跟 delayMs 一个值，脚本与以前逐字节相同。
+  const quickDelayMs = Number.isFinite(opts.quickDelayMs)
+    ? Math.max(0, Math.round(opts.quickDelayMs)) : delayMs;
   const animate = opts.animate !== false;
   const out = [];
 
@@ -594,7 +603,8 @@ export function deckToPowerShell(slides, options) {
         if (res.shapeRef) shapeRef = res.shapeRef;
       }
       out.push(`  Write-PMark '@@STEP ${gi} done'`);
-      if (delayMs > 0) out.push(`  Start-Sleep -Milliseconds ${delayMs}`);
+      const ms = DRAW_QUICK_KINDS.includes(step.kind) ? quickDelayMs : delayMs;
+      if (ms > 0) out.push(`  Start-Sleep -Milliseconds ${ms}`);
       out.push('');
     }
 
@@ -790,7 +800,8 @@ export function probePowerPoint(options) {
  * `{ type:'phase', phase:'slide', slide, slides, title }`，`step` 事件上多 `slide` / `slides`。
  *
  * @param {Array<{steps: Array, background?: string, title?: string}>} slides
- * @param {object} options 同 deckToPowerShell，另加 keepScript（留下临时脚本便于排错）。
+ * @param {object} options 同 deckToPowerShell（delayMs / quickDelayMs 原样透传给它），
+ *                 另加 keepScript（留下临时脚本便于排错）。
  *                 `windowBounds`（演示模式摆窗口）在这边**一律忽略**，只记一条 info ——
  *                 那是 macOS 驱动器的事，Windows 上不许因为多收了一个字段就报错。
  * @param {(event: object) => void} [onEvent]

@@ -16,6 +16,7 @@
 import { dmlColor, dmlSolidFill, dmlNoFill, dmlLine, dmlPrstShape, dmlRoundAdj, dmlCustomShape, dmlTextShape, dmlSlideXml } from './drawingml.mjs';
 import { svgPathToSubpaths, svgMarkupToShapes } from './svg-path.mjs';
 import { SCENE_THEME_DEFAULTS, svgFitFontSize, svgEstimateTextWidth, svgVariantStyle, svgMetric, svgMetricRaw, svgLenPx, svgIconChip, svgPanelLabelPaint, svgEdgeWeight, svgEdgeInk, svgViewBoxSize } from './scene-svg.mjs';
+import { sceneTitleFit } from '../title-fit.mjs';
 
 // 文本竖直落点的换算常数（单位：em）。
 //   centralDrop —— SVG 的 dominant-baseline="central" 相对「PowerPoint 行盒中心」的偏移。
@@ -600,13 +601,25 @@ export function sceneToPptxShapes(scene, theme, options) {
 
   // 2. 标题 / 副标题（SVG 按字母基线定位，这里换成行盒中心）
   if (scene.title && scene.title.text) {
-    const font = svgFitFontSize(scene.title.text, 56, scene.title.w);
+    // 标题：**一个**文本形状，行间 <a:br/>，行距用 lnSpc 精确写成 lineH（= px × 1.15），
+    // 与 SVG 的 dy 同一个数。折行结论优先采信 scene.title.lines（构建期已算）。
+    const fit = sceneTitleFit(scene.title);
+    const font = fit.px;
+    const rows = fit.lines.length;
+    // 第一行的行盒中心按原口径（pptxFromBaseline，真 PowerPoint 上标出来的）不动；
+    // 多行时盒子中心 = 第一行中心 + (行数-1) × lineH / 2，盒高取整块文字高。
+    const firstCy = pptxFromBaseline(palette, scene.title.y + font * 0.9, font);
+    const widest = fit.lines.reduce((acc, line) => Math.max(acc, svgEstimateTextWidth(line, font)), 0);
     out.push(dmlTextShape({
-      id: nextId(), name: '标题', text: scene.title.text, px: font, bold: true,
+      id: nextId(), name: '标题', text: fit.lines.join('\n'), lines: fit.lines, px: font, bold: true,
       color: palette.text, align: 'start', x: scene.title.x,
-      cy: pptxFromBaseline(palette, scene.title.y + font * 0.9, font),
-      lineH: font * 1.25,
-      w: Math.max(4, svgEstimateTextWidth(scene.title.text, font) * 1.35 + font), ...fonts,
+      cy: firstCy + (rows - 1) * fit.lineH / 2,
+      // 单行时行距 / 盒高沿用标过的 font×1.25（cy 也正好等于 firstCy）→ 与改动前逐字节一致；
+      // 多行时行距换成 SVG 同款 lineH（px×1.15），盒高取整块文字高，居中之后第一行的行盒
+      // 中心仍然落在 firstCy 上。
+      lineH: rows > 1 ? fit.lineH : font * 1.25,
+      boxH: rows > 1 ? rows * fit.lineH : font * 1.25,
+      w: Math.max(4, widest * 1.35 + font), ...fonts,
     }));
   }
   if (scene.subtitle && scene.subtitle.text) {
