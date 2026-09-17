@@ -15,7 +15,7 @@
 // import 必须整行写完（构建期按行剥离，见 docs/phase2-contracts.md §0）
 import { dmlColor, dmlSolidFill, dmlNoFill, dmlLine, dmlPrstShape, dmlRoundAdj, dmlCustomShape, dmlTextShape, dmlSlideXml } from './drawingml.mjs';
 import { svgPathToSubpaths, svgMarkupToShapes } from './svg-path.mjs';
-import { SCENE_THEME_DEFAULTS, svgFitFontSize, svgEstimateTextWidth, svgVariantStyle, svgMetric, svgMetricRaw, svgLenPx, svgIconChip, svgPanelLabelPaint, svgEdgeWeight, svgEdgeInk, svgViewBoxSize } from './scene-svg.mjs';
+import { SCENE_THEME_DEFAULTS, svgFitFontSize, svgEstimateTextWidth, svgTextFont, svgTitleMeasure, svgVariantStyle, svgMetric, svgMetricRaw, svgLenPx, svgIconChip, svgPanelLabelPaint, svgEdgeWeight, svgEdgeInk, svgViewBoxSize } from './scene-svg.mjs';
 import { sceneTitleFit } from '../title-fit.mjs';
 
 // 文本竖直落点的换算常数（单位：em）。
@@ -603,13 +603,15 @@ export function sceneToPptxShapes(scene, theme, options) {
   if (scene.title && scene.title.text) {
     // 标题：**一个**文本形状，行间 <a:br/>，行距用 lnSpc 精确写成 lineH（= px × 1.15），
     // 与 SVG 的 dy 同一个数。折行结论优先采信 scene.title.lines（构建期已算）。
-    const fit = sceneTitleFit(scene.title);
+    // 估宽走标定尺子（title 角色 = 该皮肤 label 组字体的 ge680 档），兜底折行与量宽同一支笔。
+    const titleFont = svgTextFont(palette, 'title');
+    const fit = sceneTitleFit(scene.title, { measure: svgTitleMeasure(palette) });
     const font = fit.px;
     const rows = fit.lines.length;
     // 第一行的行盒中心按原口径（pptxFromBaseline，真 PowerPoint 上标出来的）不动；
     // 多行时盒子中心 = 第一行中心 + (行数-1) × lineH / 2，盒高取整块文字高。
     const firstCy = pptxFromBaseline(palette, scene.title.y + font * 0.9, font);
-    const widest = fit.lines.reduce((acc, line) => Math.max(acc, svgEstimateTextWidth(line, font)), 0);
+    const widest = fit.lines.reduce((acc, line) => Math.max(acc, svgEstimateTextWidth(line, font, titleFont)), 0);
     out.push(dmlTextShape({
       id: nextId(), name: '标题', text: fit.lines.join('\n'), lines: fit.lines, px: font, bold: true,
       color: palette.text, align: 'start', x: scene.title.x,

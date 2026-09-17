@@ -14,6 +14,8 @@
 //   measure(text, fontPx, availW, role) -> { lines, width }   width = 最长一行的像素宽
 //   role 为 'label' | 'sub', 供调用方按角色切换字重(主副标题字重不同, 同字号下宽度不同)
 // 浏览器侧用 Range.getClientRects() 实测, Node 侧用估算器, 两边共用同一套求解逻辑。
+// 估算器只有一把尺子: lib/text-metrics.mjs 的 makeTextMeasurer (内联时它排在本模块之前)。
+import { makeTextMeasurer } from './text-metrics.mjs';
 
 export const NODE_FIT_DEFAULTS = Object.freeze({
   ratio: 1.125,        // 相邻档位的字号比(1.125 = 大二度; 越大跃迁感越强)
@@ -234,24 +236,9 @@ export function solveNodeFit(box, content, style, measure, opts) {
   return out;
 }
 
-// Node 侧/构建期用的估算测量器(CJK 记 1em, ASCII 记 0.52em, 贪心折行),
-// 与 generate.mjs estTextWidth / quality-checker 同口径。浏览器侧应换成 DOM 实测。
-export function makeEstimateMeasurer() {
-  const unit = function (ch) { return ch.charCodeAt(0) > 0xff ? 1 : 0.52; };
-  return function (text, fontPx, availW) {
-    const s = String(text == null ? '' : text);
-    if (!s) return { lines: 0, width: 0 };
-    // 折行点: 空格处优先(keep-all 下中文之间也可断)
-    let lines = 1, cur = 0, max = 0, wordW = 0, wordStart = true;
-    for (let i = 0; i < s.length; i++) {
-      const w = unit(s[i]) * fontPx;
-      const breakable = s[i] === ' ' || s.charCodeAt(i) > 0xff;
-      if (cur + w > availW && !wordStart) {
-        if (breakable || wordW === 0) { max = Math.max(max, cur); lines++; cur = w; wordW = w; }
-        else { max = Math.max(max, cur - wordW); lines++; cur = wordW + w; wordW += w; }
-      } else { cur += w; wordW = breakable ? 0 : wordW + w; }
-      wordStart = false;
-    }
-    return { lines: lines, width: Math.min(availW, Math.max(max, cur)) };
-  };
+// Node 侧/构建期用的估算测量器: 转调 lib/text-metrics.mjs 的 makeTextMeasurer(标定过的逐字形表, 贪心折行)。
+// fontOrSkin 传皮肤 id / spec 时按 measure 的 role 参数取该皮肤 label / sub 的字体; 省略则按默认皮肤。
+// 浏览器侧应换成 DOM 实测(generate.mjs 的 measureText)。
+export function makeEstimateMeasurer(fontOrSkin) {
+  return makeTextMeasurer(fontOrSkin);
 }

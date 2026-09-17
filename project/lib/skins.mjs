@@ -1039,6 +1039,21 @@ export function scaleMetrics(metrics, s) {
 }
 
 // 结构 token → quality-checker 的 options（质检与渲染共用同一口径, 见 QC_DEFAULTS 的 ← 标记）
+// 卡片单边边框宽度（px）：从皮肤 border 简写 token 的开头取数（'1.5px solid #…' → 1.5）。
+// 变体各有自己的 token：accent → abd、store → sbd、muted → mbd，其余用 nbd；
+// 菱形（decision）的边框画在 ::before 的 clip-path 上、不占内容盒，取 0。
+// border-box 下边框吃掉的是内容宽高：node-fit 求解（arch-doc 的 buildScene）与质检
+// （qualityOptionsOf 的 nodeBorderPx、场景节点的 borderPx）都从这里取，口径只有一份。
+// 只读页运行时另有 getComputedStyle 读出的真值（generate.mjs 的 fitBorderPx），两者应相等。
+export function skinNodeBorderPx(skin, variant) {
+  if (variant === 'decision') return 0;
+  const t = (skin && skin.tokens) || {};
+  const key = variant === 'accent' ? 'abd' : (variant === 'store' ? 'sbd' : (variant === 'muted' ? 'mbd' : 'nbd'));
+  const raw = t[key] == null ? t.nbd : t[key];
+  const m = String(raw == null ? '' : raw).match(/^\s*(\d+(?:\.\d+)?)px\b/);
+  return m ? Number(m[1]) : 0;
+}
+
 export function skinQualityOptions(metrics) {
   const L = skinLayout(metrics);
   return {

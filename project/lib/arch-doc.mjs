@@ -16,13 +16,14 @@
 // 容器不写坐标：包围盒由子项递归推出（containerRect）。
 
 import { SLIDE_WIDTH, SLIDE_HEIGHT, normalizeLayoutId, getSlideLayout, getDefaultFrame } from './slide-layouts.mjs';
-import { SKINS, DEFAULT_SKIN, skinMetrics, skinLayout, skinCardWidth, skinCardHeight, skinExportTheme, skinCssVarMap, scaleMetrics, skinQualityOptions, skinPanelLabelRect, METRICS_DEFAULTS } from './skins.mjs';
-import { estimateTextWidth, checkQuality, QUALITY_RULES, edgesBundled, segmentOnSharedTrunk } from './quality-checker.mjs';
+import { SKINS, DEFAULT_SKIN, skinMetrics, skinLayout, skinCardWidth, skinCardHeight, skinExportTheme, skinCssVarMap, scaleMetrics, skinQualityOptions, skinPanelLabelRect, METRICS_DEFAULTS, skinNodeBorderPx } from './skins.mjs';
+import { checkQuality, QUALITY_RULES, edgesBundled, segmentOnSharedTrunk } from './quality-checker.mjs';
+import { estimateTextWidth, textFontOf, textWidthMargin, makeTextMeasurer } from './text-metrics.mjs';
 import { fitTitle, TITLE_LINE, TITLE_PX, TITLE_MIN_PX, TITLE_MAX_LINES } from './title-fit.mjs';
 import { aabbIntersects, segmentIntersectsRect, segmentsIntersect, rectContains } from './geometry-utils.mjs';
 import { routeEdges, ROUTER_DEFAULTS, isEdgePort, snapEdgePort, edgePortAnchors, edgePortPoint } from './edge-router.mjs';
 import { edgeWeight } from './edge-weight.mjs';
-import { nodeFitStyle, solveNodeFit, makeEstimateMeasurer } from './node-fit.mjs';
+import { nodeFitStyle, solveNodeFit } from './node-fit.mjs';
 import { matchIcon, iconSlugExists } from './icons/icon-matcher.mjs';
 import { measureLayout, scoreLayout, vetoedByPrecision } from './layout-metrics.mjs';
 import { LAYOUT_WEIGHTS } from './layout-weights.mjs';
@@ -156,7 +157,13 @@ export const EDGE_DIRECTIONS = [
   { id: 'both', label: '双向' },
 ];
 
-const measurer = makeEstimateMeasurer();
+// node-fit 用的估算测量器按皮肤取字体（lib/text-metrics.mjs 一把尺子），同一皮肤复用一个
+const textMeasurerCache = {};
+function textMeasurerOf(spec) {
+  const id = skinIdOf(spec);
+  if (!textMeasurerCache[id]) textMeasurerCache[id] = makeTextMeasurer(id);
+  return textMeasurerCache[id];
+}
 
 /* ---------------- 树 ---------------- */
 
@@ -340,6 +347,23 @@ export function skinOf(spec) {
   return SKINS[spec.skin] || SKINS[DEFAULT_SKIN];
 }
 
+// 皮肤 id（认不出的回默认皮肤）——文字估宽按皮肤 × 角色取字体（lib/text-metrics.mjs）
+export function skinIdOf(spec) {
+  return SKINS[spec.skin] ? spec.skin : DEFAULT_SKIN;
+}
+
+// 卡片文字的需求宽：标题 / 副标题各按自己的角色字体估宽取大，再加余量（估算仍是估算，
+// 可用宽 ≥ 估算宽 + 余量；余量规则在 text-metrics 的 textWidthMargin，不藏在常数里）。
+// layoutOnce / layoutLayered / widenBlockedCorridors 三处 needW 都走这里，口径只有一份。
+export function nodeTextNeedW(spec, metrics, n) {
+  const id = skinIdOf(spec);
+  const labelFont = textFontOf(id, 'label');
+  const subFont = textFontOf(id, 'sub');
+  const labelW = estimateTextWidth(n.label, metrics.typeNode, labelFont) + textWidthMargin(n.label, metrics.typeNode, labelFont);
+  const subW = n.sublabel ? estimateTextWidth(n.sublabel, metrics.typeSmall, subFont) + textWidthMargin(n.sublabel, metrics.typeSmall, subFont) : 0;
+  return Math.max(labelW, subW);
+}
+
 // 外框相对「打开时那一版外框」缩了多少。generate.mjs 的 BASE_FRAME 在载入时固定，
 // 这里同样在 fromBuildSpec 时把 baseFrame 钉死，之后拖外框 / 切版式都相对它算。
 export function frameScale(spec) {
@@ -376,6 +400,9 @@ export function qualityOptionsOf(spec) {
   const ewQc = edgeWeight(Number((skinOf(spec).tokens || {}).ew) || 2, s);
   opts.arrowClearPx = ewQc.headLen;
   opts.arrowHalfPx = ewQc.headHalf;
+  opts.skinId = skinIdOf(spec);   // 质检估宽按皮肤 × 角色取字体（lib/text-metrics.mjs）
+  // 卡片边框宽与 buildScene 传给 node-fit 的同源（skinNodeBorderPx）；场景节点自带 borderPx 时质检优先用节点的
+  opts.nodeBorderPx = skinNodeBorderPx(skinOf(spec), 'default');
   return opts;
 }
 
@@ -893,7 +920,7 @@ function layoutOnce(spec, maxCols, opts = {}) {
   const INSET = Math.max(qc.containerMargin, 28);   // 外框内侧留白，同时兜住容器包围盒
   const leaves = Array.from(cellOf.keys()).map((id) => findNodeById(spec, id)).filter(Boolean);
   const needW = (n) => {
-    const tw = Math.max(estimateTextWidth(n.label, metrics.typeNode), estimateTextWidth(n.sublabel, metrics.typeSmall));
+    const tw = nodeTextNeedW(spec, metrics, n);
     if (n.variant === 'decision') return Math.round((tw + metrics.cardPadX) / 0.6);
     return Math.round(tw + metrics.cardPadX * 2 + (resolveIcon(spec, n) ? metrics.iconSize + metrics.iconGapX : 0));
   };
@@ -998,6 +1025,7 @@ function layoutOnce(spec, maxCols, opts = {}) {
   // 任何落点都无法让箭头露出来。把对应方向的格距下限抬到「标签跨度 + 两端箭头 +
   // 余量」——用一点卡片尺寸换连线与箭头的可读性，是明确的产品取舍。
   const edgeLabelPxNow = Math.round(metrics.typeSmall * 0.8);
+  const edgeFont = textFontOf(skinIdOf(spec), 'edge');
   const ewGap = edgeWeight(Number((skinOf(spec).tokens || {}).ew) || 2, fs);
   // 抽成函数是因为要算两次：这里按进场邻接算一次定初值，爬山重排完再按定稿邻接
   // 复算一次（见下面的 enforceLabelGapFloors）。两处必须同一把尺，抄一份迟早跑偏。
@@ -1014,7 +1042,7 @@ function layoutOnce(spec, maxCols, opts = {}) {
       const arrowEnds = e.undirected ? 0 : e.bidirectional ? 2 : 1;   // 无箭头边两头都不用留箭头位
       const clearance = ewGap.headLen * arrowEnds + 8 * (arrowEnds + 1);
       if (ca.y === cb.y && Math.abs(ca.x - cb.x) === 1) {
-        x = Math.max(x, estimateTextWidth(e.label, edgeLabelPxNow) + 24 + clearance);
+        x = Math.max(x, estimateTextWidth(e.label, edgeLabelPxNow, edgeFont) + 24 + clearance);
       }
       if (ca.x === cb.x && Math.abs(ca.y - cb.y) === 1) {
         y = Math.max(y, Math.round(edgeLabelPxNow * 1.5) + clearance);
@@ -1056,7 +1084,7 @@ function layoutOnce(spec, maxCols, opts = {}) {
       //   同列直连边：标签在两张卡之间的纵向缝里，行缝要塞得下标签高；
       //   拐弯的边：横段落在某道行缝里、竖段落在某道列缝里，标签会挑放得下的那段 —— 行缝给标签高
       //   （横段带标签最常见），列缝只给走线通道（给标签宽会让每道列缝都撑到 115，等于回到全图一个数）。
-      const labelW = e.label ? estimateTextWidth(e.label, edgeLabelPxNow) + 24 + clearance : 0;
+      const labelW = e.label ? estimateTextWidth(e.label, edgeLabelPxNow, edgeFont) + 24 + clearance : 0;
       const labelH = e.label ? Math.round(edgeLabelPxNow * 1.5) + clearance : 0;
       // 同行的带标签边（不限相邻）：它横穿的每道列缝都要塞得下标签 —— 标签落在哪道缝不知道，只能都留；
       // 只留相邻那道试过：case-01 隔列的同行边标签压到中间的卡上，质检 92 → 90。
@@ -1780,12 +1808,11 @@ const LAYERED_CARD_H_MAX = 1.75;   // 竖向富余分给卡高的上限（× 基
 const LAYERED_SIDE_H_MAX = 2.2;    // side 列卡片高的上限（× 基准卡高），再多的富余进卡片间距
 const LAYERED_BAND_GAP_MAX = 3;    // 竖向富余分给层带间距的上限（× 层带间距）
 const LAYERED_SIDE_W_RATIO = 0.2;  // side 列外宽不超过外框宽的这个比例
-// side 列卡宽的安全余量与下限（都 × typeScaleW，余量再 × frameScale）。needW 是估算字宽 + 左右内边距 + 图标位，
-// 浏览器实测字宽比估算略大：卡宽恰好 == needW 时，4 个汉字 + 图标的卡（夹具 01 的 身份认证 / 权限管控 / 数据加密 /
-// 审计日志）在工作台里全部折成两行。流程排版没这个问题，因为它的卡宽下限是 240 × typeScaleW（layoutOnce 的 targetW）；
-// side 列是竖排、宽度从需求宽反推，得自己留余量、设下限。封顶（LAYERED_SIDE_W_RATIO）仍优先：顶到封顶就以封顶为准。
-export const LAYERED_SIDE_W_MARGIN = 24;
-export const LAYERED_SIDE_CARD_W_MIN = 220;
+// side 列卡宽 = 最宽子卡的 needW（估算字宽 + 余量 + 左右内边距 + 图标位）。2026-09-12 曾给它单独加
+// 安全余量 24 / 下限 220（LAYERED_SIDE_W_MARGIN / LAYERED_SIDE_CARD_W_MIN）：当时的尺子（CJK 1em / ASCII 0.52em）
+// 比浏览器实测窄，卡宽恰好 == needW 时 4 个汉字 + 图标的卡全部折成两行。2026-09-13 尺子按真浏览器标定
+// （lib/text-metrics.mjs）、余量统一由 nodeTextNeedW 加（textWidthMargin）之后，这两个临时常数撤掉：
+// 夹具 01 / 02 无头 Chrome 重截图核对，side 列与层带标签都是一行。封顶（LAYERED_SIDE_W_RATIO）仍优先。
 // 压缩的最后一档：卡高最低压到基准卡高的这个比例（stratum 68 → 41），再不够就越界交给质检。
 // 需求原文的下限是 NODE_MIN.h；主打皮肤的层带内边距即使收紧，夹具 01（B 版式五层）/ 02（A 版式
 // 四层带嵌套）也塞不进 56，这一档是拟定值，待孙毅拍板（docs/decisions.md 2026-09-12）。
@@ -1849,9 +1876,9 @@ export function layoutLayered(spec) {
   // 卡片基准高与流程排版同口径：全图有没有 sublabel 决定一档，同一张图里所有卡片等高
   const anySub = leaves.some((n) => n.sublabel != null && n.sublabel !== '');
   const H0 = skinCardHeight(metrics, { hasSub: anySub });
-  // 卡片最小宽：口径照抄 layoutOnce 的 needW（文字估宽 + 左右内边距 + 图标位），再兜 NODE_MIN.w
+  // 卡片最小宽：口径照抄 layoutOnce 的 needW（文字估宽 + 余量 + 左右内边距 + 图标位），再兜 NODE_MIN.w
   const needW = (n) => {
-    const tw = Math.max(estimateTextWidth(n.label, metrics.typeNode), estimateTextWidth(n.sublabel, metrics.typeSmall));
+    const tw = nodeTextNeedW(spec, metrics, n);
     if (n.variant === 'decision') return Math.round((tw + metrics.cardPadX) / 0.6);
     return Math.round(tw + metrics.cardPadX * 2 + (resolveIcon(spec, n) ? metrics.iconSize + metrics.iconGapX : 0));
   };
@@ -1867,14 +1894,11 @@ export function layoutLayered(spec) {
   let bands = top.filter((n) => !layeredSideOf(n));
   if (!bands.length) { bands = top.slice(); sides = []; }
 
-  // side 列外宽：卡宽 = max(最宽子卡所需宽 + 安全余量, 下限)，再加左右内边距，封顶外框宽的 20%
-  // （封顶生效时以封顶为准）。typeScaleW 口径同 layoutOnce 的 targetW。
-  const typeScaleW = metrics.typeNode / METRICS_DEFAULTS.typeNode;
-  const sideMargin = Math.round(LAYERED_SIDE_W_MARGIN * typeScaleW * fs);
-  const sideCardMin = Math.round(LAYERED_SIDE_CARD_W_MIN * typeScaleW);
+  // side 列外宽：卡宽 = 最宽子卡所需宽（needW 已含估宽余量），再加左右内边距，封顶外框宽的 20%
+  // （封顶生效时以封顶为准）。
   const sideCap = Math.round(frame.w * LAYERED_SIDE_W_RATIO);
   const cols = sides.map((n) => {
-    const inner = Math.max(sideCardMin, Math.max(...n.children.map(minWOf)) + sideMargin);
+    const inner = Math.max(...n.children.map(minWOf));
     const w = Math.max(pad.left + pad.x + 16, Math.min(sideCap, inner + pad.left + pad.x));
     return { node: n, side: layeredSideOf(n), w: Math.round(w) };
   });
@@ -2253,7 +2277,7 @@ export function panelLabelBands(spec, scene, metrics) {
     .map((c) => ({
       id: c.id,
       label: c.label,
-      rect: skinPanelLabelRect(m, c, estimateTextWidth(c.label, m.typeSmall)),
+      rect: skinPanelLabelRect(m, c, estimateTextWidth(c.label, m.typeSmall, textFontOf(skinIdOf(spec), 'panel'))),
     }));
 }
 
@@ -2282,16 +2306,16 @@ const LABEL_PAD_Y = 3 / 14;
 const LABEL_BORDER = 1;        // 边框不随 type-scale 缩
 const LABEL_LINE = 1.4;        // line-height:normal 的实测值
 
-export function edgeLabelSize(text, px) {
+export function edgeLabelSize(text, px, font) {
   return {
-    w: estimateTextWidth(text, px) + 2 * LABEL_PAD_X * px + 2 * LABEL_BORDER,
+    w: estimateTextWidth(text, px, font) + 2 * LABEL_PAD_X * px + 2 * LABEL_BORDER,
     h: LABEL_LINE * px + 2 * LABEL_PAD_Y * px + 2 * LABEL_BORDER,
   };
 }
 
-export function edgeLabelBoxAt(text, pts, labelT, px) {
+export function edgeLabelBoxAt(text, pts, labelT, px, font) {
   const p = edgeLabelPointOf(pts, Number.isFinite(labelT) ? labelT : undefined);
-  const { w, h } = edgeLabelSize(text, px);
+  const { w, h } = edgeLabelSize(text, px, font);
   return { x: p.x - w / 2, y: p.y - h / 2, w, h };
 }
 
@@ -2329,12 +2353,10 @@ function widenBlockedCorridors(spec, metrics, cellOf, cut, redraw) {
   // 两种通道各有一道闸：编组标题通道只有竖排标题（side）值得收窄卡片（见 bands 那行），
   // 端点通道与皮肤的标题排法无关，任何皮肤都要处理，所以这里不能整个函数提前返回。
   const px = Math.round(metrics.typeSmall * 0.8);
+  const edgeFont = textFontOf(skinIdOf(spec), 'edge');
   const qcOpts = qualityThresholdsOf(spec);
   const minWidthOf = (node) => {
-    const textW = Math.max(
-      estimateTextWidth(node.label, metrics.typeNode),
-      estimateTextWidth(node.sublabel, metrics.typeSmall),
-    );
+    const textW = nodeTextNeedW(spec, metrics, node);
     return skinCardWidth(metrics, textW, { variant: node.variant, hasLeftIcon: !!resolveIcon(spec, node) });
   };
 
@@ -2350,14 +2372,14 @@ function widenBlockedCorridors(spec, metrics, cellOf, cut, redraw) {
       const text = typeof edge.label === 'string' ? edge.label : (edge.label && edge.label.text) || '';
       if (!text) continue;
       const spec1 = byId.get(edge.id);
-      const box = edgeLabelBoxAt(text, edge.pts, spec1 && spec1.labelT, px);
+      const box = edgeLabelBoxAt(text, edge.pts, spec1 && spec1.labelT, px, edgeFont);
       const band = bands.find((b) => aabbIntersects(box, b.rect));
       if (!band) continue;
 
       // 闸二：先看沿线挪能不能救。能救就别动卡片 —— 收窄是最后手段，
       // 手调基准里也只收了三张，其余保持等宽。
       if (LABEL_T_CANDIDATES.some((t) => {
-        const probe = edgeLabelBoxAt(text, edge.pts, t == null ? undefined : t, px);
+        const probe = edgeLabelBoxAt(text, edge.pts, t == null ? undefined : t, px, edgeFont);
         return !bands.some((b) => aabbIntersects(probe, b.rect))
           && !scene.nodes.some((n) => n.id !== edge.source && n.id !== edge.target && aabbIntersects(probe, n));
       })) continue;
@@ -2399,7 +2421,7 @@ function widenBlockedCorridors(spec, metrics, cellOf, cut, redraw) {
       const text = typeof edge.label === 'string' ? edge.label : (edge.label && edge.label.text) || '';
       if (!text) continue;
       const spec1 = byId.get(edge.id);
-      const box = edgeLabelBoxAt(text, edge.pts, spec1 && spec1.labelT, px);
+      const box = edgeLabelBoxAt(text, edge.pts, spec1 && spec1.labelT, px, edgeFont);
       const src = scene.nodes.find((n) => n.id === edge.source);
       const tgt = scene.nodes.find((n) => n.id === edge.target);
       if (!src || !tgt) continue;
@@ -2413,7 +2435,7 @@ function widenBlockedCorridors(spec, metrics, cellOf, cut, redraw) {
       if (!intrudes(src, box) && !intrudes(tgt, box)) continue;
       // 闸：沿线挪能救就别动卡片，与编组标题通道同一条原则
       if (LABEL_T_CANDIDATES.some((t) => {
-        const probe = edgeLabelBoxAt(text, edge.pts, t == null ? undefined : t, px);
+        const probe = edgeLabelBoxAt(text, edge.pts, t == null ? undefined : t, px, edgeFont);
         return !intrudes(src, probe) && !intrudes(tgt, probe)
           && !scene.nodes.some((n) => n.id !== edge.source && n.id !== edge.target && aabbIntersects(probe, n));
       })) continue;
@@ -2472,7 +2494,7 @@ export function relaxEdgeLabels(spec) {
     const pts = routes.get(e.id);
     if (!pts) return null;
     const p = edgeLabelPointOf(pts, t == null ? undefined : t);
-    const w = estimateTextWidth(e.label, px) + 24;
+    const w = estimateTextWidth(e.label, px, textFontOf(skinIdOf(spec), 'edge')) + 24;
     const h = Math.round(px * 1.5);
     return { x: p.x - w / 2, y: p.y - h / 2, w, h };
   };
@@ -2481,7 +2503,7 @@ export function relaxEdgeLabels(spec) {
   const metricsNow = metricsOf(spec);
   const labelBands = scene.containers
     .filter((c) => c.label != null && String(c.label) !== '')
-    .map((c) => skinPanelLabelRect(metricsNow, c, estimateTextWidth(c.label, metricsNow.typeSmall)));
+    .map((c) => skinPanelLabelRect(metricsNow, c, estimateTextWidth(c.label, metricsNow.typeSmall, textFontOf(skinIdOf(spec), 'panel'))));
   // 箭头净空 / 端点侵入的口径一律从 qualityOptionsOf 取，和质检器读同一组数：
   // 排版器照着自己的一套摆、质检器照着另一套判，就会出现「摆到最优仍然扣分」。
   const qcOpts = qualityThresholdsOf(spec);
@@ -2689,9 +2711,14 @@ export function titleBlock(spec) {
   const subPx = 24;
   // 副标题占掉的高度先从框高里扣掉，剩下的才是标题能用的竖向空间
   const subH = spec.subtitle ? 12 + subPx * 1.4 : 0;
+  // 折行用的估宽走标定尺子（lib/text-metrics.mjs），按 spec 的皮肤取 title 角色的字体。
+  // 不传的话 fitTitle 会落到 text-metrics 的默认字体（sans 600–650 档），与页面真正画出来的
+  // 「该皮肤 label 组字体 + 720 字重」对不上，断行位置会与工作台画布 / 导出件不一致。
+  const titleFont = textFontOf(skinIdOf(spec), 'title');
   const fit = fitTitle(spec.title || '', {
     basePx: TITLE_PX, minPx: TITLE_MIN_PX, maxLines: TITLE_MAX_LINES,
     lineHeight: TITLE_LINE, maxW: box.w, maxH: Math.max(0, box.h - subH),
+    measure: (t, px) => estimateTextWidth(t, px, titleFont),
   });
   const h = fit.h + subH;
   // 版式 A 的竖向居中按**真实**标题高算（折行之后可能是好几行，不能再按一行高算）
@@ -2793,14 +2820,18 @@ export function buildScene(spec, opts = {}) {
     const hit = resolveIcon(spec, n);
     const asset = hit ? iconAsset(hit.slug) : null;
     const position = n.iconPosition === 'top' ? 'top' : 'left';
-    // icon 传 'left'/'top'/null —— node-fit 靠它决定要不要给图标留位
-    const style = nodeFitStyle(metrics, { variant: n.variant, icon: asset ? position : null });
-    const fit = solveNodeFit(r, { label: n.label, sublabel: n.sublabel }, style, measurer, {});
+    // icon 传 'left'/'top'/null —— node-fit 靠它决定要不要给图标留位。
+    // borderPx 是皮肤该变体的边框宽（skinNodeBorderPx）：border-box 下边框吃掉内容宽，不传
+    // 就等于按 0 算，求解说「一行放得下」、浏览器里差这 2–3px 多折一行（2026-09-13 审查实测：
+    // diagram.json 的「API 网关」卡宽 209、可用 97 对估算 98.1，只读页 DOM 实测有边框、工作台没有）。
+    const borderPx = skinNodeBorderPx(skinOf(spec), n.variant);
+    const style = nodeFitStyle(metrics, { variant: n.variant, icon: asset ? position : null, borderPx });
+    const fit = solveNodeFit(r, { label: n.label, sublabel: n.sublabel }, style, textMeasurerOf(spec), {});
     scene.nodes.push({
       id: n.id, label: n.label, sublabel: n.sublabel,
       x: r.x, y: r.y, w: r.w, h: r.h,
       labelPx: fit.fontPx, subPx: fit.subPx,
-      padX: fit.padX, padY: fit.padY, labelGap: fit.gap,
+      padX: fit.padX, padY: fit.padY, labelGap: fit.gap, borderPx,
       iconPx: fit.iconSize, iconGapPx: fit.iconGap,
       fit: { lines: fit.lines, subLines: fit.subLines, tier: fit.tier, overflow: fit.overflow, dropSub: fit.dropSub },
       variant: n.variant || 'default',
@@ -2869,7 +2900,7 @@ export function buildScene(spec, opts = {}) {
     };
     if (e.label) {
       const px = Math.round(metrics.typeSmall * 0.8);
-      const w = estimateTextWidth(e.label, px) + 24;
+      const w = estimateTextWidth(e.label, px, textFontOf(skinIdOf(spec), 'edge')) + 24;
       const h = Math.round(px * 1.5);
       const mid = edgeLabelPointOf(entry.pts, e.labelT);
       entry.label = { text: e.label, x: mid.x - w / 2, y: mid.y - h / 2, w, h, px };

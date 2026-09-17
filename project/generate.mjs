@@ -71,10 +71,12 @@ const INLINE_LIB_FILES = [
   'lib/edge-weight.mjs',   // 必须排在 skins.mjs 之前: skins 的 CSS 变量要用它拆边色
   'lib/skin-css.mjs',
   'lib/skins.mjs',
+  'lib/text-metrics-table.mjs',   // 文字估宽的逐字形表(生成文件); text-metrics 依赖它
+  'lib/text-metrics.mjs',         // 一把尺子: node-fit / quality-checker / 运行时 estTextWidth 都转调它
   'lib/node-fit.mjs',
   'lib/geometry-utils.mjs',
   'lib/quality-checker.mjs',
-  'lib/title-fit.mjs',   // 必须排在 quality-checker 之后（默认估宽用它）、导出器之前
+  'lib/title-fit.mjs',   // 必须排在 text-metrics / quality-checker 之后（估宽用那把尺子）、导出器之前
   'lib/edge-router.mjs',
   'lib/auto-fixer.mjs',
   'lib/icons/icon-matcher.mjs',
@@ -984,8 +986,8 @@ ${inlinedRuntimeLibs}
     // 就会溢出节点框。这里做两级处理:
     //   1) 等比档: 目标字号 = 基准字号 × 外框缩放系数(相对生成时的外框)
     //   2) 装箱档: 目标字号若仍装不下(非等比拉伸/长文本/菱形窄腰), 二分再缩到装得下为止
-    // 估宽口径与 lib/quality-checker.mjs、lib/exporters/scene-svg.mjs 保持一致:
-    // CJK 记 1em、ASCII 记 0.52em, 行高 LINE_H; 内边距/图标占位一律取自结构 token。
+    // 估宽走 lib/text-metrics.mjs 这一把尺子(真浏览器标定的逐字形表, 按皮肤 × 角色取字体),
+    // 行高 LINE_H; 内边距/图标占位一律取自结构 token。
     let TYPE_BASE = { node: METRICS.typeNode, sub: METRICS.typeSmall, edgeLabel: ${EDGE_LABEL_PX} };
     const TYPE_MIN_PX = 10;                       // 字号下限, 低于此值不再缩(改为允许溢出前的最后防线)
     const TYPE_SCALE_RANGE = { min: 0.3, max: 2 }; // 外框缩放系数的钳制区间
@@ -1070,11 +1072,10 @@ ${inlinedRuntimeLibs}
       return s;
     }
 
+    // 编组标题(kicker)的估宽: 转调 lib/text-metrics.mjs, 按当前皮肤的 panel 角色取字体
+    // (含 text-transform: uppercase 与 letter-spacing)。卡片文字不走这里——运行时用 measureText 实测。
     function estTextWidth(text, px) {
-      const s = String(text == null ? '' : text);
-      let units = 0;
-      for (let i = 0; i < s.length; i++) units += s.charCodeAt(i) > 0xff ? 1 : 0.52;
-      return units * px;
+      return estimateTextWidth(text, px, textFontOf(appliedSkinId || ACTIVE_SKIN_ID, 'panel'));
     }
     // ================= 节点内容阶梯自适应(lib/node-fit.mjs) =================
     // 档位阶梯建在设计空间(未缩放的 METRICS.typeNode)而不是 RMETRICS: 外框缩放会等比缩小
@@ -2043,6 +2044,7 @@ ${inlinedRuntimeLibs}
       const ewNowQc = edgeWeight(ewBase, GEO_FIT * s);
       opts.arrowClearPx = ewNowQc.headLen;
       opts.arrowHalfPx = ewNowQc.headHalf;
+      opts.skinId = appliedSkinId || ACTIVE_SKIN_ID;   // 质检估宽按皮肤 × 角色取字体(lib/text-metrics.mjs)
       return opts;
     }
 

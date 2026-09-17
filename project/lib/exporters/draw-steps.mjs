@@ -22,7 +22,7 @@
 // 导出名：sceneToDrawSteps / drawStepsSummary / flattenColor / DRAW_STEP_KINDS /
 //         DRAW_OP_KINDS / DRAW_DEFAULT_SCALE / DRAW_SHAPE_OPS / DRAW_QUICK_KINDS
 
-import { SCENE_THEME_DEFAULTS, svgFitFontSize, svgEstimateTextWidth, svgVariantStyle, svgMetric, svgMetricRaw, svgLenPx, svgPanelLabelPaint, svgEdgeWeight, svgEdgeInk } from './scene-svg.mjs';
+import { SCENE_THEME_DEFAULTS, svgFitFontSize, svgEstimateTextWidth, svgTextFont, svgTitleMeasure, svgVariantStyle, svgMetric, svgMetricRaw, svgLenPx, svgPanelLabelPaint, svgEdgeWeight, svgEdgeInk } from './scene-svg.mjs';
 import { sceneTitleFit } from '../title-fit.mjs';
 import { dmlColor } from './drawingml.mjs';
 import { PPTX_TEXT_METRICS, pptxFonts } from './scene-pptx.mjs';
@@ -187,14 +187,16 @@ export function sceneToDrawSteps(scene, theme, options) {
   if (scene.title && scene.title.text) {
     // 标题仍是「一步一形状」，多行靠 text 里的换行出多段（驱动器按段落逐段设字号 / 字色 /
     // 粗细，见 mac-powerpoint.mjs 的 para 累加），折行结论与 SVG / PPTX 同一份。
-    const fit = sceneTitleFit(scene.title);
+    // 估宽走标定尺子（title 角色 = 该皮肤 label 组字体的 ge680 档），与 SVG / PPTX 同一支笔。
+    const titleFont = svgTextFont(palette, 'title');
+    const fit = sceneTitleFit(scene.title, { measure: svgTitleMeasure(palette) });
     const font = fit.px;
     const rows = fit.lines.length;
     const text = fit.lines.join('\n');
     // 单行沿用标过的 font×1.25；多行取整块文字高（rows × lineH），锚点仍是盒子竖向居中，
     // 盒子中心 = 第一行中心 + (行数-1) × lineH / 2，第一行落点与单行时一致。
     const h = rows > 1 ? rows * fit.lineH : font * 1.25;
-    const widest = fit.lines.reduce((acc, line) => Math.max(acc, svgEstimateTextWidth(line, font)), 0);
+    const widest = fit.lines.reduce((acc, line) => Math.max(acc, svgEstimateTextWidth(line, font, titleFont)), 0);
     const w = Math.max(4, widest * 1.35 + font);
     const cy = fromBaseline(scene.title.y + font * 0.9, font) + (rows - 1) * fit.lineH / 2;
     push('title', 'title', scene.title.text, [

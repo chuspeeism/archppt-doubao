@@ -8,9 +8,11 @@
 //
 // 策略与常数的来由见 docs/title-fit-spec.md。
 //
-// 纯函数、无 DOM、无 npm 依赖；估宽默认复用 quality-checker 的 estimateTextWidth（同一份口径，
-// 不再各抄一份）。内联顺序：必须排在 quality-checker.mjs 之后、arch-doc.mjs 与导出器之前。
-import { estimateTextWidth } from './quality-checker.mjs';
+// 纯函数、无 DOM、无 npm 依赖；估宽复用全引擎那把标定尺子 lib/text-metrics.mjs 的 estimateTextWidth
+// （同一份口径，不再各抄一份）。默认不带 font → text-metrics 的默认字体；**调用方应当传自己的 measure**：
+// arch-doc 的 titleBlock 按 spec 的皮肤取 label 组字体 + ge680 档，导出器用 scene-svg 的 svgTitleMeasure。
+// 内联顺序：必须排在 text-metrics.mjs / quality-checker.mjs 之后、arch-doc.mjs 与导出器之前。
+import { estimateTextWidth } from './text-metrics.mjs';
 
 export const TITLE_PX = 72, TITLE_MIN_PX = 36, TITLE_MAX_LINES = 4, TITLE_LINE = 1.15;
 // 降字号的档距：72 → 70 → … → 36，正好落在下限上

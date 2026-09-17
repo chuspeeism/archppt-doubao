@@ -1,6 +1,7 @@
 // lib/quality-checker.mjs [INLINE] —— 质量检查（契约 §3，PRD §2.2/§2.7）
-// 只允许 import ./geometry-utils.mjs；无 DOM 依赖；ES2019。
+// 只允许 import ./geometry-utils.mjs 与 ./text-metrics.mjs；无 DOM 依赖；ES2019。
 import { aabbIntersects, aabbOverlapArea, rectContains, segmentsIntersect, segmentIntersectsRect, polylineLength, manhattanDistance, countBends, expandRect } from './geometry-utils.mjs';
+import { estimateTextWidth, textFontOf } from './text-metrics.mjs';
 
 // 判断「一张架构图是否合理」的唯一一份准则：生成器、只读产物、工作台都读这里。
 // 工作台侧原本另有一套简化判断（重叠 / 越界 / 裁切 / 孤立 / 穿越），已合并进本文件；
@@ -149,18 +150,16 @@ export const qcParentIdOf = (node, containers) => {
   return best ? best.id : null;
 };
 
-export function estimateTextWidth(text, px) {
-  // CJK（及其他宽字符）记 1em，ASCII 记 0.52em（0.6 对 Latin 高估约 15%，见测试反馈 P1#8）
-  let units = 0;
-  for (const ch of String(text ?? '')) units += ch.codePointAt(0) > 0xff ? 1 : 0.52;
-  return units * px;
-}
+// 文字估宽的尺子只有一把：lib/text-metrics.mjs 的 estimateTextWidth（真浏览器标定的逐字形表，
+// 2026-09-13 起）。本模块不再自己定义；内联作用域下由 text-metrics 定义同名函数，它排在本模块之前。
+// 字体按 options.skinId × 角色取（textFontOf），没传皮肤就用默认组。
 
 // 变体/图标感知的标签可用宽度（与渲染器口径一致，修 P1#8）
 const qcLabelAvailWidth = (n, opts) => {
   // 运行时解出的实际内边距优先；边框在 border-box 下占用内容宽，两侧都要扣
   const padX = Number.isFinite(n.padX) ? n.padX : opts.nodePaddingX;
-  const border = (opts.nodeBorderPx || 0) * 2;
+  // 边框宽：场景节点带 borderPx（buildScene 按皮肤 × 变体取，与 node-fit 求解同源）就用它，没有再退到选项
+  const border = (Number.isFinite(n.borderPx) ? n.borderPx : (opts.nodeBorderPx || 0)) * 2;
   let avail = n.w - border - padX * 2;
   if (n.variant === 'decision') avail = n.w * 0.6 - 8;       // 菱形中线可用宽
   else if (n.variant === 'circle') avail = n.w * 0.75 - border;  // 圆内接近似
@@ -168,8 +167,10 @@ const qcLabelAvailWidth = (n, opts) => {
   return Math.max(20, avail);
 };
 
-// 估宽是近似值: 超出可用宽 8% 以内视为"能挤下一行"，不预测折行（避免边缘性误报）
-const qcPredictLines = (textW, availW) => (textW > availW * 1.08 ? Math.ceil(textW / availW) : 1);
+// 估宽是近似值: 超出可用宽 2% 以内视为"能挤下一行"，不预测折行（避免边缘性误报）。
+// 尺子标定前是 8%（旧口径对 Latin 差可达 12px 以上）；标定后含 Latin 的标签 p95 差 < 4px，收到 2%。
+const QC_WRAP_TOLERANCE = 1.02;
+const qcPredictLines = (textW, availW) => (textW > availW * QC_WRAP_TOLERANCE ? Math.ceil(textW / availW) : 1);
 
 // 轴对齐线段的共线重叠长度（不共线或垂直距离超过 gap 返回 0）
 const qcCollinearOverlap = (p1, p2, p3, p4, gap) => {
@@ -287,8 +288,8 @@ export function checkQuality(scene, options = {}) {
     // 运行时会按外框缩放自适应字号并写回 labelPx/subPx；没有就按生成基准字号算
     const labelPx = Number.isFinite(n.labelPx) ? n.labelPx : opts.nodeLabelPx;
     const subPx = Number.isFinite(n.subPx) ? n.subPx : opts.nodeSubPx;
-    const labelW = estimateTextWidth(n.label, labelPx);
-    const subW = n.sublabel ? estimateTextWidth(n.sublabel, subPx) : 0;
+    const labelW = estimateTextWidth(n.label, labelPx, textFontOf(opts.skinId, 'label'));
+    const subW = n.sublabel ? estimateTextWidth(n.sublabel, subPx, textFontOf(opts.skinId, 'sub')) : 0;
     const labelLines = qcPredictLines(labelW, availW);
     const subLines = subW > 0 ? qcPredictLines(subW, availW) : 0;
     if (!opts.labelWrap) {

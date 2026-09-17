@@ -4,6 +4,8 @@
 // SVG 没有 z-index，谁后画谁在上：连线是全图最顶层的可见物，必须整体排在节点之后，
 // 否则节点卡片会把穿过它的线段盖断（六种导出共用这一份，PPTX/PDF 里同样会断）。
 import { edgeWeight, arrowMarkerGeometry, splitColorAlpha } from '../edge-weight.mjs';
+import { textFontOf, estimateTextWidth } from '../text-metrics.mjs';
+import { SKINS } from '../skins.mjs';
 import { sceneTitleFit } from '../title-fit.mjs';
 
 export const SCENE_THEME_DEFAULTS = Object.freeze({
@@ -34,22 +36,37 @@ const svgNum = (value) => {
   return String(rounded);
 };
 
-// 与 quality-checker 的 estimateTextWidth 同款估宽算法的局部版本：
-// CJK（及其它非 Latin1 字符）记 1em，ASCII 记 0.52em（实测 0.6 高估约 15%）。
-export const svgEstimateTextWidth = (text, px) => {
-  const value = String(text ?? '');
-  let units = 0;
-  for (let i = 0; i < value.length; i += 1) {
-    units += value.charCodeAt(i) > 0xff ? 1 : 0.52;
-  }
-  return units * px;
+// 估宽转调全引擎唯一的尺子 lib/text-metrics.mjs（方案 C 第③路，2026-09-13）：
+// 之前这里是最后一份「ASCII 0.52em」局部实现，排版侧已按真浏览器标定换尺子，导出侧的字号自适应
+// 再用旧口径就会与页面对不上（Latin 标签旧尺子高估约 10–20%，导出件把本来放得下的字缩小）。
+// font 省略 → text-metrics 的默认字体（sans 600–650 档，保守）；scene-svg 自己的调用点按皮肤 × 角色传。
+export const svgEstimateTextWidth = (text, px, font) => estimateTextWidth(text, px, font);
+
+// 皮肤识别：theme 自带 skinId 直接用；skinExportTheme 不带 id，按字体族 + 底色反查 SKINS；
+// 都认不出（自定义 theme）交给 textFontOf 的默认皮肤。
+const svgSkinIdOf = (palette) => {
+  if (!palette) return null;
+  if (typeof palette.skinId === 'string') return palette.skinId;
+  const ids = Object.keys(SKINS);
+  const both = ids.find((id) => SKINS[id].tokens.ff === palette.fontFamily && SKINS[id].tokens.bg === palette.background);
+  return both || ids.find((id) => SKINS[id].tokens.ff === palette.fontFamily) || null;
+};
+// 皮肤 × 角色 → 字体描述（role: label / sub / edge / panel / title）。
+// 角色→字体的映射只在 text-metrics.textFontOf 里，这里只负责「palette → 皮肤 id」这一步。
+export const svgTextFont = (palette, role) => textFontOf(svgSkinIdOf(palette), role);
+// 大标题折行用的量尺：喂给 lib/title-fit.mjs 的 fitTitle / sceneTitleFit 的 measure 参数。
+// title-fit 默认走 quality-checker 的 estimateTextWidth（不带字体 → 默认字体），三个导出器与
+// arch-doc 的 titleBlock 一律改传这一支，四条链路才会断在同一处。
+export const svgTitleMeasure = (palette) => {
+  const font = svgTextFont(palette, 'title');
+  return (text, px) => svgEstimateTextWidth(text, px, font);
 };
 
 // 超宽时按比例缩小字号（不换行），下限 15px——低于此可读性崩坏，宁可轻微溢出。
 // **这条政策只管节点标签 / 容器标签 / 边标签**；左上角那行大标题走 lib/title-fit.mjs 的
 // 「先折行、装不下再缩」（下限 36px），两条政策不要互相抄。
-export const svgFitFontSize = (text, basePx, maxW, minPx = 15) => {
-  const width = svgEstimateTextWidth(text, basePx);
+export const svgFitFontSize = (text, basePx, maxW, minPx = 15, font) => {
+  const width = svgEstimateTextWidth(text, basePx, font);
   if (width <= 0 || maxW <= 0 || width <= maxW) return basePx;
   const scaled = Math.floor(basePx * (maxW / width) * 10) / 10;
   return Math.max(minPx, scaled);
@@ -182,7 +199,7 @@ export const svgLenPx = (value) => {
   const n = parseFloat(String(value == null ? '' : value));
   return Number.isFinite(n) ? n : 0;
 };
-const svgEstTextWidth = (text, px) => svgEstimateTextWidth(text, px);
+const svgEstTextWidth = (text, px, font) => svgEstimateTextWidth(text, px, font);
 
 // 图标位底板（皮肤 tokens 的 iconChipBg / iconChipR / iconGlyphRatio）。
 // 老皮肤没声明就退回无底色、字形铺满，与之前一字不差。
@@ -209,8 +226,8 @@ const svgNodeIconMarkup = (node, palette) => {
   const gapX = svgMetric(palette, 'iconGapX');
   const labelPx = Number.isFinite(node.labelPx) ? node.labelPx : svgMetric(palette, 'typeNode');
   const subPx = Number.isFinite(node.subPx) ? node.subPx : svgMetric(palette, 'typeSmall');
-  const tw = Math.max(svgEstTextWidth(node.label, labelPx),
-    node.sublabel ? svgEstTextWidth(node.sublabel, subPx) : 0);
+  const tw = Math.max(svgEstTextWidth(node.label, labelPx, svgTextFont(palette, 'label')),
+    node.sublabel ? svgEstTextWidth(node.sublabel, subPx, svgTextFont(palette, 'sub')) : 0);
   const bx = onTop ? node.x + node.w / 2 - box / 2
     : node.x + Math.max(svgMetric(palette, 'cardPadX'), (node.w - (box + gapX + tw)) / 2);
   const by = onTop ? node.y + svgMetric(palette, 'iconGapTop') + 4 : node.y + node.h / 2 - box / 2;
@@ -255,8 +272,10 @@ const svgNodeTextMarkup = (node, palette) => {
   // labelPx/subPx 由运行时的字号自适应写入(外框缩放后的实际字号)；缺省回落到结构 token 的基准字号
   const labelBase = Number.isFinite(node.labelPx) ? node.labelPx : svgMetric(palette, 'typeNode');
   const subBase = Number.isFinite(node.subPx) ? node.subPx : svgMetric(palette, 'typeSmall');
-  const labelFont = svgFitFontSize(label, labelBase, availW, Math.min(15, labelBase));
-  const subFont = sublabel ? svgFitFontSize(sublabel, subBase, availW, Math.min(15, subBase)) : 0;
+  const labelF = svgTextFont(palette, 'label');
+  const subF = svgTextFont(palette, 'sub');
+  const labelFont = svgFitFontSize(label, labelBase, availW, Math.min(15, labelBase), labelF);
+  const subFont = sublabel ? svgFitFontSize(sublabel, subBase, availW, Math.min(15, subBase), subF) : 0;
   // 双行时按行高排版(而非固定 ∓12/14)，字号被自适应缩小后行距同步收紧。
   // 解释文字的行高是 1.4，与大标题的 1.15 分开 —— 口径同 lib/skins.mjs 的 LINE_H_SUB。
   const labelLine = labelFont * 1.15;
@@ -268,7 +287,7 @@ const svgNodeTextMarkup = (node, palette) => {
   // 整组在卡片里居中，文字块自身从图标右缘起排
   const anchor = iconLeft ? 'start' : 'middle';
   const textW = iconLeft
-    ? Math.max(svgEstTextWidth(label, labelFont), sublabel ? svgEstTextWidth(sublabel, subFont) : 0)
+    ? Math.max(svgEstTextWidth(label, labelFont, labelF), sublabel ? svgEstTextWidth(sublabel, subFont, subF) : 0)
     : 0;
   const textX = iconLeft
     ? node.x + (node.w - (iconLeftW + textW)) / 2 + iconLeftW
@@ -308,9 +327,10 @@ const svgContainerMarkup = (container, palette) => {
   const paint = svgPanelLabelPaint(container, palette);
   paint.r = svgLenPx(paint.rawR) || r * 0.5;
   const textAttrs = (font) => `font-size="${svgNum(font)}" font-weight="650" letter-spacing="2" fill="${paint.ink}"`;
+  const panelF = svgTextFont(palette, 'panel');
 
   if (mode === 'bar-top') {
-    const font = svgFitFontSize(container.label, base, container.w - labelPadX * 2, Math.min(15, base));
+    const font = svgFitFontSize(container.label, base, container.w - labelPadX * 2, Math.min(15, base), panelF);
     const plate = paint.bg
       ? `<rect class="scene-container-bar" x="${svgNum(container.x)}" y="${svgNum(container.y)}" width="${svgNum(container.w)}" height="${svgNum(barH)}" rx="${svgNum(r)}" ry="${svgNum(r)}" fill="${svgEsc(paint.bg)}"/>`
         // 下面两个角要方的: 再盖一块无圆角的矩形补满带子的下半截
@@ -329,7 +349,7 @@ const svgContainerMarkup = (container, palette) => {
     const barX = container.x + inset;
     const barY = container.y + inset;
     const barH = Math.max(0, container.h - inset * 2);
-    const font = svgFitFontSize(container.label, base, barH - labelPadX * 2, Math.min(15, base));
+    const font = svgFitFontSize(container.label, base, barH - labelPadX * 2, Math.min(15, base), panelF);
     const lr = paint.r;
     const plate = paint.bg
       ? `<rect class="scene-container-bar" x="${svgNum(barX)}" y="${svgNum(barY)}" width="${svgNum(colW)}" height="${svgNum(barH)}" rx="${svgNum(lr)}" ry="${svgNum(lr)}" fill="${svgEsc(paint.bg)}"/>`
@@ -346,8 +366,8 @@ const svgContainerMarkup = (container, palette) => {
 
   // chip: 左对齐容器左内边距, 在顶部内边距带里垂直居中
   const padTop = svgMetric(palette, 'panelPadTop');
-  const font = svgFitFontSize(container.label, base, container.w - padLeft - svgMetric(palette, 'panelPadX') - labelPadX * 2, Math.min(15, base));
-  const chipW = svgEstTextWidth(container.label, font) + labelPadX * 2;
+  const font = svgFitFontSize(container.label, base, container.w - padLeft - svgMetric(palette, 'panelPadX') - labelPadX * 2, Math.min(15, base), panelF);
+  const chipW = svgEstTextWidth(container.label, font, panelF) + labelPadX * 2;
   const chipY = container.y + (padTop - barH) / 2;
   const plate = paint.bg
     ? `<rect class="scene-container-chip" x="${svgNum(container.x + padLeft)}" y="${svgNum(chipY)}" width="${svgNum(chipW)}" height="${svgNum(barH)}" rx="${svgNum(paint.r)}" ry="${svgNum(paint.r)}" fill="${svgEsc(paint.bg)}"/>`
@@ -401,7 +421,7 @@ const svgEdgeLabelMarkup = (edge, palette) => {
   const label = edge.label;
   if (!label || label.text == null || String(label.text) === '') return '';
   const labelBase = Number.isFinite(label.px) ? label.px : 18;
-  const font = svgFitFontSize(label.text, labelBase, label.w - 16, Math.min(15, labelBase));
+  const font = svgFitFontSize(label.text, labelBase, label.w - 16, Math.min(15, labelBase), svgTextFont(palette, 'edge'));
   const bg = `<rect class="scene-edge-label-bg" x="${svgNum(label.x)}" y="${svgNum(label.y)}" width="${svgNum(label.w)}" height="${svgNum(label.h)}" rx="${svgNum(label.h / 2)}" ry="${svgNum(label.h / 2)}" fill="${palette.edgeLabelBg}" stroke="rgba(0,0,0,0.08)"/>`;
   const text = `<text class="scene-edge-label" x="${svgNum(label.x + label.w / 2)}" y="${svgNum(label.y + label.h / 2)}" text-anchor="middle" dominant-baseline="central" font-size="${svgNum(font)}" fill="${palette.edgeLabelText}">${svgEsc(label.text)}</text>`;
   return bg + text;
@@ -432,8 +452,10 @@ export function sceneToSvg(scene, theme) {
   // 2. 标题 / 副标题
   if (scene.title && scene.title.text) {
     // 多行标题：一个 <text> 里逐行 <tspan>，第一行落在 y = title.y + px*0.9（字母基线），
-    // 之后每行 dy = lineH。折行结论优先用 scene.title.lines（构建期已算），没有就现场算。
-    const fit = sceneTitleFit(scene.title);
+    // 之后每行 dy = lineH。折行结论优先用 scene.title.lines（构建期已算），没有就现场算——
+    // 现场算时也要用标定尺子（title 角色 = 该皮肤 label 组字体的 ge680 档），否则只读页那条
+    // 「按 DOM rect 构 scene」的链路断行会与工作台 / 构建期不一致。
+    const fit = sceneTitleFit(scene.title, { measure: svgTitleMeasure(palette) });
     const x = svgNum(scene.title.x);
     const spans = fit.lines
       .map((line, i) => `<tspan x="${x}"${i ? ` dy="${svgNum(fit.lineH)}"` : ''}>${svgEsc(line)}</tspan>`)
@@ -441,7 +463,7 @@ export function sceneToSvg(scene, theme) {
     parts.push(`<text class="scene-title" x="${x}" y="${svgNum(scene.title.y + fit.px * 0.9)}" font-size="${svgNum(fit.px)}" font-weight="720" fill="${palette.text}">${spans}</text>`);
   }
   if (scene.subtitle && scene.subtitle.text) {
-    const font = svgFitFontSize(scene.subtitle.text, 28, scene.subtitle.w);
+    const font = svgFitFontSize(scene.subtitle.text, 28, scene.subtitle.w, 15, svgTextFont(palette, 'sub'));
     parts.push(`<text class="scene-subtitle" x="${svgNum(scene.subtitle.x)}" y="${svgNum(scene.subtitle.y + font * 0.9)}" font-size="${svgNum(font)}" fill="${palette.textSecondary}">${svgEsc(scene.subtitle.text)}</text>`);
   }
 
